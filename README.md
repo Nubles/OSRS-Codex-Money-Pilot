@@ -74,6 +74,20 @@ the list follows how you actually play.
 
 ![Rogues' Castle chest log](docs/rogues-chest-log.png) ![Chest plaque](docs/rogues-chest-plaque.png)
 
+- **Port Roberts stalls**: the wiki's stall rotations at Port Roberts (a primary stall four times, a
+  secondary twice, from the silver and fish stalls at 50 Thieving to the cannonball and ore stalls at
+  87) are methods, gated by the primary stall's Thieving level and the 50 Sailing to dock there. Steal
+  from the stalls and Money Pilot logs your own steals (a steal counts when Thieving experience comes in
+  while you steal, and the amount names the stall), their loot as it lands in your pack, the times a
+  Market Guard caught you and any bribe to leave the jail, by rotation. After a quarter of an hour at a
+  rotation your rate ranks it in Best now, and **Thieving, side by side** on Your rates lists every
+  Thieving method you can do by what it pays you: your picks, chests and steals where you have them,
+  the wiki's figure where you do not.
+- **Stall plaque**: while stealing, the sitting's rate, experience an hour, rotation and times caught.
+  Numbers only: no stall, guard or tick is marked.
+
+![Port Roberts stall log](docs/port-roberts-stall-log.png) ![Stall plaque](docs/port-roberts-plaque.png)
+
 ![A method opened](docs/best-open.png) ![Within reach](docs/reach.png) ![Your rates](docs/yours.png)
 
 ![Goal](docs/goal.png) ![Run coach](docs/coach.png)
@@ -119,6 +133,9 @@ plans for the coins goal in the settings, or says how to set one.
   uses its own values, and treats a stack as single items (three runes of a stack are three kept
   items), so it says what a death would roughly cost. It is not worked out for ultimate ironmen, whose
   rules differ.
+- The stall log counts a guard's arrest from his words ("Hey! What do you think you're doing?! You're
+  under arrest!"), whether they come overhead or in the chat; the time spent in the jail counts against
+  the rate either way. Stalls below the silver stall are not logged.
 - Money Pilot reads the game and never acts in it. It shows numbers and wiki links, never what to
   click. Nothing leaves your computer.
 
@@ -139,6 +156,7 @@ prices, which is why your own clocked rate replaces them.
 | Pickpocketing vyres / elves | Thieving 82 + Sins of the Father / Thieving 85 + Song of the Elves |
 | Pickpocketing Ardougne knights / paladins / master farmers | Thieving 55 / 70 / 38 (read 4 November 2026) |
 | Rogues' Castle chests | Thieving 84, Prayer 43, Medium Wilderness Diary |
+| Port Roberts stall rotations | Thieving 50 / 65 / 75 / 82 / 87 (the primary stall), Sailing 50 (from the Port Roberts page; the guide has no page, so the figures are estimates from the stall pages, read 4 November 2026) |
 | Casting Tan Leather | Magic 78, Lunar Diplomacy, Hard Fremennik Diary |
 | Killing Kree'arra | Ranged 70 (Armadyl's Eyrie, unboostable), Troll Stronghold |
 | Killing Commander Zilyana / General Graardor / K'ril | Agility 70 / Strength 70 and Prayer 43 / Hitpoints 70, Troll Stronghold |
@@ -157,6 +175,7 @@ The full list, with each page's wording, is in `MethodsTest.gatesMatchTheWiki` a
 - **Pickpocketing**: *Log pickpocketing* (on), *Pickpocket plaque* (on) and *Pouch warning* (3
   pouches before the cap; 0 for none)
 - **Rogues' Castle chests**: *Log the chests* (on), *Chest plaque* (on) and *If you die now* (on)
+- **Port Roberts stalls**: *Log the stalls* (on) and *Stall plaque* (on)
 - **Goal**: *Coins goal (thousands)* (0, none), *Coins goal name*, *Hours played a day* (2), and
   *Plan Gear Roadmap's goal* (on)
 - **Keep field notes** (off): a local record of what the plugin reads and decides, for checking its

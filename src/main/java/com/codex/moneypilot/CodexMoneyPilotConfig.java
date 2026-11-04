@@ -202,6 +202,39 @@ public interface CodexMoneyPilotConfig extends Config
 	}
 
 	@ConfigSection(
+		name = "Port Roberts stalls",
+		description = "The stall log: your own steals, Thieving experience and rate an hour at the Port Roberts market stalls",
+		position = 40
+	)
+	String STALLS = "stallSection";
+
+	@ConfigItem(
+		keyName = "stallLog",
+		name = "Log the stalls",
+		description = "Count your steals from the Port Roberts market stalls, their loot, your Thieving experience and the times a guard "
+			+ "caught you, and rank each rotation by your own rate once you have a quarter of an hour of it",
+		section = STALLS,
+		position = 0
+	)
+	default boolean stallLog()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "stallPlaque",
+		name = "Stall plaque",
+		description = "While stealing from the Port Roberts stalls, show the rate, Thieving experience an hour and times caught on the "
+			+ "game screen. Numbers only: no stall or guard is marked",
+		section = STALLS,
+		position = 1
+	)
+	default boolean stallPlaque()
+	{
+		return true;
+	}
+
+	@ConfigSection(
 		name = "Field notes",
 		description = "A local record for checking the plugin's guesses",
 		position = 99,

@@ -12,6 +12,7 @@ import com.codex.moneypilot.core.Pickpockets;
 import com.codex.moneypilot.core.Planner;
 import com.codex.moneypilot.core.Rate;
 import com.codex.moneypilot.core.Rates;
+import com.codex.moneypilot.core.Stalls;
 import com.codex.moneypilot.core.Clocked;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -324,6 +325,8 @@ public class MoneyPanel extends PluginPanel
 
 		pickpockets(s);
 		chests(s);
+		stalls(s);
+		thieving(s);
 
 		List<Method> chronicled = new ArrayList<>();
 		for (Method m : Methods.all())
@@ -505,6 +508,162 @@ public class MoneyPanel extends PluginPanel
 		card.add(head, BorderLayout.NORTH);
 		card.add(body, BorderLayout.CENTER);
 		return card;
+	}
+
+	// ---- Port Roberts stall log ----
+
+	private void stalls(StackPanel s)
+	{
+		if (!view.stallLog)
+		{
+			return;
+		}
+		s.add(new SectionHeader("Port Roberts stalls", view.stolen.isEmpty() ? null : String.valueOf(view.stolen.size())));
+		if (view.stolen.isEmpty())
+		{
+			s.add(note("Steal from the market stalls at Port Roberts and your own steals, times a guard caught you, Thieving "
+				+ "experience and rate an hour gather here, by the rotation you work. After a quarter of an hour at a "
+				+ "rotation, your rate ranks it in Best now, beside pickpocketing."));
+			return;
+		}
+		for (View.Stolen st : view.stolen)
+		{
+			s.add(stolenCard(st));
+		}
+		s.add(note("Your own counts over the last " + Rates.DAYS + " days: a steal counts when Thieving experience comes in "
+			+ "while you steal, and its loot is what lands in your pack that tick, valued at today's prices. A sitting is "
+			+ "filed under the rotation of the best stall you stole from; time selling, banking and in the jail counts."));
+	}
+
+	private Card stolenCard(View.Stolen st)
+	{
+		Card card = new Card(new BorderLayout(0, 4)).accent(Theme.TEAL);
+		JPanel head = row();
+		head.add(Ui.wrapped(st.rotation.getTitle(), Theme.body(), Theme.TEXT, TEXT - 50), BorderLayout.CENTER);
+		head.add(top(rateLabel(st.perHour())), BorderLayout.EAST);
+		JPanel body = column();
+		JPanel figures = new JPanel(new GridLayout(1, 3, 6, 0));
+		figures.setOpaque(false);
+		figures.add(stat("PER STEAL", Format.gp(st.perSteal()), Theme.GOLD));
+		figures.add(stat("XP/HR", st.playedMs <= 0 ? "-" : Format.gp(st.xpPerHour()), Theme.TEXT));
+		figures.add(stat("CAUGHT", String.valueOf(st.caught), st.caught == 0 ? Theme.TEXT : Theme.EMBER));
+		body.add(figures);
+		double ofWiki = st.ofWikiXp();
+		JPanel bar = new JPanel(new BorderLayout());
+		bar.setOpaque(false);
+		bar.setBorder(new EmptyBorder(3, 0, 3, 0));
+		bar.add(SplitBar.progress(ofWiki, Theme.progressColor(ofWiki)), BorderLayout.CENTER);
+		body.add(bar);
+		body.add(Ui.wrapped(Math.round(ofWiki * 100) + "% of the wiki's most, " + Format.gp(st.rotation.getWikiXpPerHour())
+			+ " xp an hour with no tick lost", Theme.small(), Theme.TEXT_FAINT, TEXT));
+		body.add(Ui.wrapped(whole(st.steals) + (st.steals == 1 ? " steal" : " steals") + " in " + Format.duration(st.playedMs)
+			+ ", " + whole(st.stealsPerHour()) + " an hour", Theme.small(), Theme.TEXT_MUTED, TEXT));
+		String paid = st.paid <= 0 ? "" : ", bribes " + Format.gp(st.paid);
+		body.add(Ui.wrapped("Loot " + Format.gp(st.loot) + paid + ".", Theme.small(), Theme.TEXT_MUTED, TEXT));
+		Method m = Methods.byId(st.rotation.getMethod());
+		if (!st.counts)
+		{
+			body.add(Ui.wrapped("Ranks once you have " + Format.duration(Rates.ENOUGH_MS) + " at this rotation.", Theme.small(),
+				Theme.GOLD_DIM, TEXT));
+		}
+		else if (m != null)
+		{
+			long wiki = m.getWikiPerHour();
+			String vs = wiki <= 0 ? "" : ": " + Math.round(st.perHour() * 100.0 / wiki) + "% of the wiki estimate, "
+				+ Format.gp(wiki);
+			body.add(Ui.wrapped("Ranks the rotation in Best now" + vs + ".", Theme.small(), Theme.TEXT_FAINT, TEXT));
+		}
+		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		buttons.setOpaque(false);
+		Stalls.Rotation rotation = st.rotation;
+		buttons.add(new CodexButton("Forget log", false, 18, () -> actions.forgetStalls(rotation)));
+		body.add(buttons);
+		card.add(head, BorderLayout.NORTH);
+		card.add(body, BorderLayout.CENTER);
+		return card;
+	}
+
+	// ---- Thieving, side by side ----
+
+	/**
+	 * Every Thieving method the account can do now, by the rate each ranks by: your own picks, chests and steals
+	 * where you have them, the wiki's figure where you do not. A method short of the guide's suggestions is in only
+	 * when you have your own rate for it. Shown only once at least one is your own.
+	 */
+	private void thieving(StackPanel s)
+	{
+		if (view.plan == null)
+		{
+			return;
+		}
+		List<Planner.Pick> picks = new ArrayList<>();
+		boolean own = false;
+		for (Planner.Pick p : view.plan.getOpen())
+		{
+			if (p.getMethod().getSkill() == net.runelite.api.Skill.THIEVING)
+			{
+				picks.add(p);
+				own |= p.getRate().isOwn();
+			}
+		}
+		for (Planner.Pick p : view.plan.getNear())
+		{
+			// Short of the guide's suggestions, but done anyway: your own rate is what it pays you.
+			if (p.getMethod().getSkill() == net.runelite.api.Skill.THIEVING && p.getFit().getStatus() == Fit.Status.STRETCH
+				&& p.getRate().isOwn())
+			{
+				picks.add(p);
+				own = true;
+			}
+		}
+		picks.sort((a, b) -> Long.compare(b.getRate().getPerHour(), a.getRate().getPerHour()));
+		if (picks.size() < 2 || !own)
+		{
+			return;
+		}
+		s.add(new SectionHeader("Thieving, side by side", String.valueOf(picks.size())));
+		Card card = new Card(new BorderLayout(0, 4)).accent(Theme.GOLD);
+		JPanel body = column();
+		long top = Math.max(1, picks.get(0).getRate().getPerHour());
+		for (Planner.Pick p : picks)
+		{
+			Rate r = p.getRate();
+			JPanel line = new JPanel(new BorderLayout(4, 0));
+			line.setOpaque(false);
+			line.setAlignmentX(LEFT_ALIGNMENT);
+			line.add(Ui.wrapped(shortName(p.getMethod()), Theme.small(), r.isOwn() ? Theme.TEXT : Theme.TEXT_MUTED, TEXT - 64),
+				BorderLayout.CENTER);
+			line.add(top(Ui.label(Format.gp(r.getPerHour()), Theme.small(), r.isOwn() ? Theme.GOLD_BRIGHT : Theme.GOLD_DIM)),
+				BorderLayout.EAST);
+			body.add(line);
+			JPanel bar = new JPanel(new BorderLayout(6, 0));
+			bar.setOpaque(false);
+			bar.setAlignmentX(LEFT_ALIGNMENT);
+			bar.setBorder(new EmptyBorder(1, 0, 5, 0));
+			double share = Math.max(0, Math.min(1, r.getPerHour() / (double) top));
+			bar.add(SplitBar.progress(share, r.isOwn() ? Theme.TEAL : Theme.GOLD_DIM), BorderLayout.CENTER);
+			bar.add(Ui.label(r.getSource().getTitle(), Theme.small(), r.isOwn() ? Theme.TEAL : Theme.TEXT_FAINT), BorderLayout.EAST);
+			body.add(bar);
+		}
+		card.add(body, BorderLayout.CENTER);
+		s.add(card);
+		s.add(note("What each pays you an hour, best first: your own rate where you have a quarter of an hour of it, the "
+			+ "wiki's figure where you have not."));
+	}
+
+	/** A method's name without the verb, for the side by side list. */
+	private static String shortName(Method m)
+	{
+		String n = m.getName();
+		for (String verb : new String[]{"Pickpocketing ", "Stealing from "})
+		{
+			if (n.startsWith(verb))
+			{
+				n = n.substring(verb.length());
+				return Character.toUpperCase(n.charAt(0)) + n.substring(1);
+			}
+		}
+		return n;
 	}
 
 	private static String whole(long n)
@@ -827,6 +986,7 @@ public class MoneyPanel extends PluginPanel
 		String who = rate.getSource() == com.codex.moneypilot.core.Rate.Source.YOURS ? "your own "
 			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.PICKPOCKETS ? "your picks' "
 			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.CHESTS ? "your chests' "
+			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.STALLS ? "your steals' "
 			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.SESSIONS ? "your sessions' " : "the wiki's ";
 		return who + Format.gp(rate.getPerHour()) + "/hr";
 	}
@@ -950,7 +1110,7 @@ public class MoneyPanel extends PluginPanel
 		}
 		if (!m.getSuggests().isEmpty())
 		{
-			d.add(small("THE GUIDE SUGGESTS", Theme.TEXT_FAINT));
+			d.add(small(m.isEstimate() ? "THE WIKI SUGGESTS" : "THE GUIDE SUGGESTS", Theme.TEXT_FAINT));
 			for (Need n : m.getSuggests())
 			{
 				d.add(needRow(n, fit.getShortOf().contains(n) ? Mark.Kind.SUGGESTED
@@ -977,11 +1137,17 @@ public class MoneyPanel extends PluginPanel
 			d.add(payLine("Your chests", chests.getPerHour(), String.format(Locale.ENGLISH, "%,d", chests.getCount())
 				+ " chests logged, " + Format.duration(chests.getPlayedMs()), Theme.TEAL));
 		}
+		Rate steals = view.rates.stalls(m);
+		if (steals != null)
+		{
+			d.add(payLine("Your steals", steals.getPerHour(), String.format(Locale.ENGLISH, "%,d", steals.getCount())
+				+ " steals logged, " + Format.duration(steals.getPlayedMs()), Theme.TEAL));
+		}
 		if (sessions != null)
 		{
 			d.add(payLine("Sessions", sessions.getPerHour(), sessions.getCount() + " in Chronicle", Theme.VIOLET));
 		}
-		d.add(payLine("Wiki", m.getWikiPerHour(), (m.getBasis() != null ? m.getBasis() + ", " : "") + Methods.CHECKED,
+		d.add(payLine(m.isEstimate() ? "Wiki est." : "Wiki", m.getWikiPerHour(), (m.getBasis() != null ? m.getBasis() + ", " : "") + Methods.CHECKED,
 			Theme.TEXT_MUTED));
 		if (m.isTrade())
 		{
@@ -998,7 +1164,7 @@ public class MoneyPanel extends PluginPanel
 				buttons.add(new CodexButton("Clock a run", true, 20, () -> actions.start(m)));
 			}
 		}
-		buttons.add(new CodexButton("Wiki guide", false, 20, () -> actions.guide(m)));
+		buttons.add(new CodexButton(m.isEstimate() ? "Wiki page" : "Wiki guide", false, 20, () -> actions.guide(m)));
 		d.add(buttons);
 		if (view.live == null && !view.bankSeen)
 		{

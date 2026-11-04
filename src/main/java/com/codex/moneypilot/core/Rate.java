@@ -11,6 +11,8 @@ public final class Rate
 		PICKPOCKETS("Your picks"),
 		/** Money Pilot's Rogues' Castle chest log, kept as you loot. */
 		CHESTS("Your chests"),
+		/** Money Pilot's Port Roberts stall log, kept as you steal. */
+		STALLS("Your steals"),
 		/** Session Chronicle's sessions spent on the method. */
 		SESSIONS("Your sessions"),
 		/** The wiki's money making guide. */

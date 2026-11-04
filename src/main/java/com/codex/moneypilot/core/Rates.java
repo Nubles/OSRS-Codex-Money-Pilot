@@ -9,7 +9,7 @@ import java.util.Set;
 
 /**
  * Each method's best known profit an hour: your own clocked runs when they add up to enough play,
- * else the pickpocket or chest log for a method they cover, else Session Chronicle's sessions spent on it, else the wiki's guide. Only the last
+ * else the pickpocket, chest or stall log for a method they cover, else Session Chronicle's sessions spent on it, else the wiki's guide. Only the last
  * {@link #DAYS} days count, so the figure follows prices and your gear as they change.
  */
 public final class Rates
@@ -22,6 +22,7 @@ public final class Rates
 	private final Map<String, Rate> sessions = new HashMap<>();
 	private final Map<String, Rate> picks = new HashMap<>();
 	private final Map<String, Rate> chests = new HashMap<>();
+	private final Map<String, Rate> stalls = new HashMap<>();
 
 	private Rates()
 	{
@@ -48,9 +49,20 @@ public final class Rates
 	public static Rates of(Collection<Clocked> runs, Collection<Logged> journal, Map<String, Rate> pickpockets,
 		Map<String, Rate> chestLog, long now)
 	{
+		return of(runs, journal, pickpockets, chestLog, null, now);
+	}
+
+	/**
+	 * As above, with the Port Roberts stall log's rates by method id ({@link StallLog#rates}), which rank as the
+	 * other logs' do: below runs you clocked yourself and above Session Chronicle's sessions.
+	 */
+	public static Rates of(Collection<Clocked> runs, Collection<Logged> journal, Map<String, Rate> pickpockets,
+		Map<String, Rate> chestLog, Map<String, Rate> stallLog, long now)
+	{
 		Rates r = new Rates();
 		keep(pickpockets, r.picks);
 		keep(chestLog, r.chests);
+		keep(stallLog, r.stalls);
 		long from = now - DAYS * 86_400_000L;
 
 		Map<String, long[]> byMethod = new HashMap<>();
@@ -134,6 +146,10 @@ public final class Rates
 		}
 		if (r == null)
 		{
+			r = stalls.get(m.getId());
+		}
+		if (r == null)
+		{
 			r = sessions.get(m.getId());
 		}
 		return r != null ? r : wiki(m);
@@ -168,9 +184,15 @@ public final class Rates
 		return chests.get(m.getId());
 	}
 
+	/** The Port Roberts stall log's rate for a method, or null. */
+	public Rate stalls(Method m)
+	{
+		return stalls.get(m.getId());
+	}
+
 	public boolean hasAny()
 	{
-		return !own.isEmpty() || !picks.isEmpty() || !chests.isEmpty() || !sessions.isEmpty();
+		return !own.isEmpty() || !picks.isEmpty() || !chests.isEmpty() || !stalls.isEmpty() || !sessions.isEmpty();
 	}
 
 	/** Records of one method, newest first. */
