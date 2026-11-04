@@ -21,10 +21,14 @@ import com.codex.moneypilot.core.Planner;
 import com.codex.moneypilot.core.Rates;
 import com.codex.moneypilot.core.Clocked;
 import com.codex.moneypilot.core.RoguesChests;
+import com.codex.moneypilot.core.StallLog;
+import com.codex.moneypilot.core.StallTracker;
+import com.codex.moneypilot.core.Stalls;
 import com.codex.moneypilot.core.Run;
 import com.codex.moneypilot.notes.FieldNotes;
 import com.codex.moneypilot.ui.Actions;
 import com.codex.moneypilot.ui.ChestPlaque;
+import com.codex.moneypilot.ui.StallPlaque;
 import com.codex.moneypilot.ui.MoneyPanel;
 import com.codex.moneypilot.ui.PickpocketPlaque;
 import com.codex.moneypilot.ui.RunPlaque;
@@ -73,6 +77,7 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.api.events.OverheadTextChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.InventoryID;
@@ -101,13 +106,14 @@ import net.runelite.client.util.Text;
  * Codex Money Pilot: which money makers this account can do, ranked by what they pay an hour. It
  * starts from the Old School wiki's money making guide and moves to your own figures as you clock
  * runs, valuing what your bank, pack and gear gained at today's prices. It also reads the sessions
- * Codex Session Chronicle files, and keeps a pickpocket log and a Rogues' Castle chest log whose rates rank those methods.
+ * Codex Session Chronicle files, and keeps a pickpocket log, a Rogues' Castle chest log and a Port Roberts stall log whose
+ * rates rank those methods.
  * It reads the game and never acts in it; nothing leaves the computer.
  */
 @PluginDescriptor(
 	name = "Codex Money Pilot",
 	description = "Money makers you can do now, ranked by what they pay you an hour: wiki figures first, then your own clocked runs",
-	tags = {"codex", "money", "gp", "profit", "money making", "planner", "gp/hr", "wiki", "pickpocket", "thieving", "coin pouch", "rogues", "chest", "wilderness"},
+	tags = {"codex", "money", "gp", "profit", "money making", "planner", "gp/hr", "wiki", "pickpocket", "thieving", "coin pouch", "rogues", "chest", "wilderness", "stall", "port roberts"},
 	internalName = "codex-money-pilot"
 )
 public class CodexMoneyPilotPlugin extends Plugin
@@ -123,6 +129,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 	private static final String HIDDEN_KEY = "hidden";
 	private static final String PICKS_KEY = "pickpockets";
 	private static final String CHESTS_KEY = "rogueChests";
+	private static final String STALLS_KEY = "portRobertsStalls";
 	/** The plaque shows while the last pick was this recent. */
 	private static final int PLAQUE_TICKS = 100;
 	/** Runs kept, newest first. */
@@ -167,6 +174,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 	private RunPlaque plaque;
 	private PickpocketPlaque pickPlaque;
 	private ChestPlaque chestPlaque;
+	private StallPlaque stallPlaque;
 	private FieldNotes notes;
 
 	private Account account = Account.UNKNOWN;
@@ -209,6 +217,13 @@ public class CodexMoneyPilotPlugin extends Plugin
 	/** The profile the chest log was read from, so it is saved back there even after the profile changes. */
 	private String chestsProfile;
 	private boolean chestRefresh;
+	private StallLog stallLog = new StallLog();
+	private StallTracker stalls = new StallTracker(stallLog);
+	private volatile View.Stealing stealing;
+	private boolean stallsDirty;
+	/** The profile the stall log was read from, so it is saved back there even after the profile changes. */
+	private String stallsProfile;
+	private boolean stallRefresh;
 	private final Set<Method.Category> shown = EnumSet.allOf(Method.Category.class);
 
 	private int accountTicks = -1;
@@ -245,6 +260,8 @@ public class CodexMoneyPilotPlugin extends Plugin
 		overlayManager.add(pickPlaque);
 		chestPlaque = new ChestPlaque(() -> config.chestPlaque() && config.chestLog() ? looting : null);
 		overlayManager.add(chestPlaque);
+		stallPlaque = new StallPlaque(() -> config.stallPlaque() && config.stallLog() ? stealing : null);
+		overlayManager.add(stallPlaque);
 		clientThread.invokeLater(() ->
 		{
 			if (client.getGameState() == GameState.LOGGED_IN)
@@ -263,9 +280,11 @@ public class CodexMoneyPilotPlugin extends Plugin
 		saveBank();
 		savePicks();
 		saveChests();
+		saveStalls(true);
 		overlayManager.remove(plaque);
 		overlayManager.remove(pickPlaque);
 		overlayManager.remove(chestPlaque);
+		overlayManager.remove(stallPlaque);
 		clientToolbar.removeNavigation(navButton);
 		if (notes != null)
 		{
@@ -276,6 +295,11 @@ public class CodexMoneyPilotPlugin extends Plugin
 		plaque = null;
 		pickPlaque = null;
 		chestPlaque = null;
+		stallPlaque = null;
+		stealing = null;
+		stallLog = new StallLog();
+		stalls = new StallTracker(stallLog);
+		stallsProfile = null;
 		picking = null;
 		looting = null;
 		chestLog = new ChestLog();
@@ -328,8 +352,11 @@ public class CodexMoneyPilotPlugin extends Plugin
 			saveBank();
 			savePicks();
 			saveChests();
+			saveStalls(true);
 			tracker.reset();
 			chests.reset();
+			stalls.reset();
+			stealing = null;
 			lootingBag = null;
 			picking = null;
 			looting = null;
@@ -345,6 +372,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 		saveRun();
 		savePicks();
 		saveChests();
+		saveStalls(true);
 		load();
 		accountTicks = 2;
 	}
@@ -385,6 +413,10 @@ public class CodexMoneyPilotPlugin extends Plugin
 		{
 			changed |= chestTick();
 		}
+		if (config.stallLog() && client.getGameState() == GameState.LOGGED_IN)
+		{
+			changed |= stallTick();
+		}
 		if (changed)
 		{
 			refresh();
@@ -398,6 +430,10 @@ public class CodexMoneyPilotPlugin extends Plugin
 		{
 			chests.thievingXp(event.getXp(), System.currentTimeMillis());
 		}
+		if (event.getSkill() == Skill.THIEVING && config.stallLog())
+		{
+			stalls.thievingXp(event.getXp(), System.currentTimeMillis());
+		}
 		// A level gained can open a method; read the account again soon, not every tick.
 		if (account.isKnown() && event.getLevel() != account.level(event.getSkill()) && (accountTicks < 0 || accountTicks > 3))
 		{
@@ -408,6 +444,10 @@ public class CodexMoneyPilotPlugin extends Plugin
 	@Subscribe
 	public void onChatMessage(ChatMessage event)
 	{
+		if (config.stallLog() && isGameLine(event.getType()) && Stalls.isArrest(Text.removeTags(event.getMessage())))
+		{
+			stalls.arrested(System.currentTimeMillis());
+		}
 		if (!config.pickpocketLog() || (event.getType() != ChatMessageType.SPAM && event.getType() != ChatMessageType.GAMEMESSAGE))
 		{
 			return;
@@ -428,6 +468,35 @@ public class CodexMoneyPilotPlugin extends Plugin
 		{
 			chests.chose(Text.removeTags(event.getMenuOption()), event.getId());
 		}
+		if (config.stallLog())
+		{
+			// Stealing goes on by itself until any other action; only read, the click is left alone.
+			if (isObjectOption(event.getMenuAction()))
+			{
+				stalls.chose(Text.removeTags(event.getMenuOption()), event.getId());
+			}
+			else
+			{
+				stalls.other();
+			}
+		}
+	}
+
+	@Subscribe
+	public void onOverheadTextChanged(OverheadTextChanged event)
+	{
+		if (config.stallLog() && event.getActor() instanceof NPC && Stalls.isMarketGuard(((NPC) event.getActor()).getId())
+			&& Stalls.isArrest(Text.removeTags(event.getOverheadText())))
+		{
+			stalls.arrested(System.currentTimeMillis());
+		}
+	}
+
+	/** Where the game, not a player, speaks: a guard's arrest may come as any of these. */
+	private static boolean isGameLine(ChatMessageType type)
+	{
+		return type == ChatMessageType.GAMEMESSAGE || type == ChatMessageType.SPAM || type == ChatMessageType.DIALOG
+			|| type == ChatMessageType.MESBOX || type == ChatMessageType.NPC_SAY;
 	}
 
 	private static boolean isObjectOption(MenuAction action)
@@ -499,6 +568,10 @@ public class CodexMoneyPilotPlugin extends Plugin
 				chests.bag(items, banking());
 			}
 			return;
+		}
+		if (config.stallLog() && id == InventoryID.INV)
+		{
+			stalls.pack(items, banking());
 		}
 		if (config.chestLog())
 		{
@@ -609,7 +682,19 @@ public class CodexMoneyPilotPlugin extends Plugin
 			});
 			return;
 		}
-		if ("wilderness".equals(event.getKey()) || "pickpocketLog".equals(event.getKey()) || "chestLog".equals(event.getKey()) || "pouchWarning".equals(event.getKey()) || "goalCoins".equals(event.getKey()) || "goalName".equals(event.getKey())
+		if ("stallLog".equals(event.getKey()) && !config.stallLog())
+		{
+			clientThread.invokeLater(() ->
+			{
+				saveStalls(true);
+				stalls.reset();
+				stealing = null;
+				refresh();
+			});
+			return;
+		}
+		if ("wilderness".equals(event.getKey()) || "pickpocketLog".equals(event.getKey()) || "chestLog".equals(event.getKey())
+			|| "stallLog".equals(event.getKey()) || "pouchWarning".equals(event.getKey()) || "goalCoins".equals(event.getKey()) || "goalName".equals(event.getKey())
 			|| "hoursPerDay".equals(event.getKey()) || "readGearRoadmap".equals(event.getKey()) || "runCoach".equals(event.getKey()))
 		{
 			clientThread.invokeLater(() ->
@@ -894,6 +979,60 @@ public class CodexMoneyPilotPlugin extends Plugin
 			c.usedValue(this::price), c.lostValue(this::price), c.getPlayedMs() >= Rates.ENOUGH_MS);
 	}
 
+	// ---- Port Roberts stalls ----
+
+	/** A tick of the stall log; true when the panel should be rebuilt. */
+	private boolean stallTick()
+	{
+		long now = System.currentTimeMillis();
+		stalls.tick(now);
+		boolean filed = stalls.takeChanged();
+		if (filed)
+		{
+			stallsDirty = true;
+		}
+		long since = stalls.sinceLastSteal();
+		if (!config.stallPlaque() || since < 0 || since > PLAQUE_TICKS)
+		{
+			stealing = null;
+		}
+		else
+		{
+			StallLog.Counts live = stalls.getLive();
+			stealing = new View.Stealing(stalls.getRotation(), stalls.getLastStall(), live.getSteals(), live.getCaught(),
+				live.getPlayedMs(), live.profit(this::price), live.getXp());
+		}
+		if (stallsDirty && tickCount % SAVE_TICKS == 0)
+		{
+			saveStalls(false);
+		}
+		stallRefresh |= filed;
+		if (stallRefresh && tickCount % LIVE_TICKS == 0)
+		{
+			stallRefresh = false;
+			return true;
+		}
+		return false;
+	}
+
+	private void forgetStalls(Stalls.Rotation rotation)
+	{
+		stallLog.forget(rotation);
+		stallsDirty = true;
+		saveStalls(false);
+		refresh();
+	}
+
+	/** The stall log as the panel shows it: each rotation valued at today's prices, best paying first. */
+	private List<View.Stolen> stolen(long now)
+	{
+		List<View.Stolen> out = new ArrayList<>();
+		stallLog.tallies(now).forEach((rotation, c) -> out.add(new View.Stolen(rotation, c.getSteals(), c.getCaught(),
+			c.getPlayedMs(), c.getXp(), c.lootValue(this::price), c.paidValue(this::price), c.getPlayedMs() >= Rates.ENOUGH_MS)));
+		out.sort((a, b) -> Long.compare(b.perHour(), a.perHour()));
+		return out;
+	}
+
 	// ---- Runs ----
 
 	private Holdings holdings()
@@ -1075,6 +1214,12 @@ public class CodexMoneyPilotPlugin extends Plugin
 		chests = new ChestTracker(chestLog);
 		looting = null;
 		chestsDirty = false;
+		stallsProfile = configManager.getRSProfileKey();
+		stallLog = StallLog.decode(gson, configManager.getRSProfileConfiguration(CodexMoneyPilotConfig.GROUP, STALLS_KEY));
+		stallLog.prune(System.currentTimeMillis());
+		stalls = new StallTracker(stallLog);
+		stealing = null;
+		stallsDirty = false;
 	}
 
 	private void saveRuns()
@@ -1124,6 +1269,29 @@ public class CodexMoneyPilotPlugin extends Plugin
 				configManager.setConfiguration(CodexMoneyPilotConfig.GROUP, chestsProfile, CHESTS_KEY, chestLog.encode(gson));
 			}
 			chestsDirty = false;
+		}
+	}
+
+	/** Saves the stall log; {@code all} first files the steals still waiting at the start of a sitting. */
+	private void saveStalls(boolean all)
+	{
+		if (all)
+		{
+			stalls.flush(System.currentTimeMillis());
+			stallsDirty |= stalls.takeChanged();
+		}
+		if (stallsDirty && stallsProfile != null)
+		{
+			stallLog.prune(System.currentTimeMillis());
+			if (stallLog.isEmpty())
+			{
+				configManager.unsetConfiguration(CodexMoneyPilotConfig.GROUP, stallsProfile, STALLS_KEY);
+			}
+			else
+			{
+				configManager.setConfiguration(CodexMoneyPilotConfig.GROUP, stallsProfile, STALLS_KEY, stallLog.encode(gson));
+			}
+			stallsDirty = false;
 		}
 	}
 
@@ -1195,12 +1363,13 @@ public class CodexMoneyPilotPlugin extends Plugin
 		long now = System.currentTimeMillis();
 		boolean loggedIn = client.getGameState() == GameState.LOGGED_IN && account.isKnown();
 		Rates rates = Rates.of(runs, journal, config.pickpocketLog() ? pickLog.rates(now, this::price) : null,
-			config.chestLog() ? chestLog.rates(now, this::price) : null, now);
+			config.chestLog() ? chestLog.rates(now, this::price) : null, config.stallLog() ? stallLog.rates(now, this::price) : null,
+			now);
 		Planner plan = loggedIn ? Planner.plan(Methods.all(), account, rates, new Planner.Filter(shown, config.wilderness())) : null;
 		View.Goals goals = plan == null ? View.Goals.NONE : goals(plan, rates);
 		View view = new View(loggedIn, account, plan, rates, new ArrayList<>(runs), journal, shown, live, bank != null, chronicle, now,
 			goals, config.pickpocketLog() ? picked(now) : null, config.pickpocketLog(), config.chestLog() ? chested(now) : null,
-			config.chestLog());
+			config.chestLog(), config.stallLog() ? stolen(now) : null, config.stallLog());
 		if (plan != null && notes != null && notes.isOpen())
 		{
 			JsonObject n = new JsonObject();
@@ -1335,6 +1504,12 @@ public class CodexMoneyPilotPlugin extends Plugin
 		public void forgetChests()
 		{
 			clientThread.invokeLater(CodexMoneyPilotPlugin.this::forgetChests);
+		}
+
+		@Override
+		public void forgetStalls(Stalls.Rotation rotation)
+		{
+			clientThread.invokeLater(() -> CodexMoneyPilotPlugin.this.forgetStalls(rotation));
 		}
 
 		@Override

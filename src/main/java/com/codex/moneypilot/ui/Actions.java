@@ -2,6 +2,7 @@ package com.codex.moneypilot.ui;
 
 import com.codex.moneypilot.core.Method;
 import com.codex.moneypilot.core.Pickpockets;
+import com.codex.moneypilot.core.Stalls;
 
 /** What the panel's buttons ask the plugin to do. */
 public interface Actions
@@ -31,4 +32,7 @@ public interface Actions
 
 	/** Forget the Rogues' Castle chest log. */
 	void forgetChests();
+
+	/** Forget the Port Roberts stall log of a rotation. */
+	void forgetStalls(Stalls.Rotation rotation);
 }

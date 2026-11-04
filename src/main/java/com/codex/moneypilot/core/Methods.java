@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import net.runelite.api.Quest;
 import net.runelite.api.gameval.VarbitID;
@@ -294,6 +295,16 @@ public final class Methods
 			.skill(THIEVING)
 			.need(skill(THIEVING, 55))
 			.suggest(skill(THIEVING, 95), skill(MAGIC, 47), diary("Medium Ardougne Diary", VarbitID.ARDOUGNE_DIARY_MEDIUM_COMPLETE)));
+		// Port Roberts market stalls, from the wiki's Port Roberts page and stall pages, read 4 November 2026. The
+		// money making guide has no page for them, so each figure is worked out from those pages: the wiki's
+		// rotation (primary stall four times, secondary twice) at one steal every 5 ticks, 1,200 steals an hour,
+		// valued at each stall page's "average theft" (or its loot table and prices where it gives none), before
+		// any time spent selling or banking. The spice rotation's figure is the wiki's own. The gates are the
+		// primary stall's Thieving level and the Sailing level to dock at Port Roberts.
+		for (Stalls.Rotation r : Stalls.Rotation.values())
+		{
+			m.add(stallMethod(r));
+		}
 		m.add(new Method("runite-ore-f2p", "Mining runite ore (free-to-play)", "Mining runite ore (free-to-play)",
 			SKILLING, 389_920, "about 40 ores an hour")
 			.f2p().skill(MINING)
@@ -417,6 +428,53 @@ public final class Methods
 
 	private Methods()
 	{
+	}
+
+	private static String stallWord(Stalls.Stall s)
+	{
+		return s.getTitle().replace(" stall", "").toLowerCase(Locale.ROOT);
+	}
+
+	private static Method stallMethod(Stalls.Rotation r)
+	{
+		long perHour;
+		String basis;
+		switch (r)
+		{
+			case CANNONBALL:
+				// Average theft 102.16 (cannonball) and 235.35 (ore): 200 rounds of 4 x 102.16 + 2 x 235.35.
+				perHour = 175_868;
+				basis = "est. from the stalls' average theft at 1,200 steals an hour, before selling";
+				break;
+			case ORE:
+				// Average theft 235.35 (ore) and 205.01 (gem).
+				perHour = 270_284;
+				basis = "est. from the stalls' average theft at 1,200 steals an hour, before selling";
+				break;
+			case GEM:
+				// Average theft 205.01 (gem); spice is always one spice, priced 42.
+				perHour = 180_808;
+				basis = "est. from the stalls' loot at 1,200 steals an hour, before selling";
+				break;
+			case SPICE:
+				// "approximately 97k Thieving experience and 100k gp per hour", selling to the traders and hopping worlds.
+				perHour = 100_000;
+				basis = "the wiki's figure, selling to the market traders and hopping worlds";
+				break;
+			default:
+				// Silver: 6/10 silver ore (46), 3/10 silver bar (131), 1/10 tiara (91), 76.0 a steal. Fish: the stall
+				// page's six raw fish at their rarities and prices, 50.22 a steal.
+				perHour = 80_889;
+				basis = "est. from the stalls' loot tables at 1,200 steals an hour, before selling";
+				break;
+		}
+		String name = "Stealing from Port Roberts stalls (" + stallWord(r.getPrimary()) + " and " + stallWord(r.getSecondary()) + ")";
+		return new Method(r.getMethod(), name, name, SKILLING, perHour, basis)
+			.wikiPage("Port Roberts")
+			.skill(THIEVING)
+			.need(skill(THIEVING, r.getPrimary().getLevel()), skill(SAILING, Stalls.SAILING))
+			// "You can use the Sailors' amulet to avoid picking the lock or using coins."
+			.suggest(note("A Sailors' amulet, to leave the jail if a guard catches you"));
 	}
 
 	/** Every method, best paying by the wiki first. */

@@ -53,6 +53,8 @@ public final class Method
 	private long everyMs;
 	/** Runs that share what they use, such as the herb patches: only the best paying of a group is done. */
 	private String group;
+	/** A wiki page other than a money making guide, for a method the guide has no page for; null for the guide's. */
+	private String wikiPage;
 
 	Method(String id, String name, String page, Category category, long wikiPerHour, String basis)
 	{
@@ -107,6 +109,16 @@ public final class Method
 		return this;
 	}
 
+	/**
+	 * For a method the money making guide has no page for: the wiki page its facts come from. Its figure is then
+	 * an estimate worked out from that page, shown as such.
+	 */
+	Method wikiPage(String fullPage)
+	{
+		wikiPage = fullPage;
+		return this;
+	}
+
 	/** The skill the method trains, matched against Session Chronicle's skilling sessions. */
 	Method skill(Skill trained)
 	{
@@ -137,10 +149,20 @@ public final class Method
 		return name;
 	}
 
-	/** The guide's address on the wiki. */
+	/** The guide's address on the wiki, or the page the method's facts come from when the guide has none. */
 	public String getUrl()
 	{
+		if (wikiPage != null)
+		{
+			return "https://oldschool.runescape.wiki/w/" + wikiPage.replace(' ', '_');
+		}
 		return "https://oldschool.runescape.wiki/w/Money_making_guide/" + page.replace(' ', '_');
+	}
+
+	/** True when the wiki figure is an estimate from a wiki page, not a money making guide's own figure. */
+	public boolean isEstimate()
+	{
+		return wikiPage != null;
 	}
 
 	public Category getCategory()

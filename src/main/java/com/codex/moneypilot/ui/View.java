@@ -9,6 +9,7 @@ import com.codex.moneypilot.core.Method;
 import com.codex.moneypilot.core.Pickpockets;
 import com.codex.moneypilot.core.Planner;
 import com.codex.moneypilot.core.Rates;
+import com.codex.moneypilot.core.Stalls;
 import com.codex.moneypilot.core.Clocked;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -282,6 +283,99 @@ public final class View
 		}
 	}
 
+	/** One rotation of the Port Roberts stall log over the last 60 days, valued at today's prices. */
+	public static final class Stolen
+	{
+		public final Stalls.Rotation rotation;
+		public final int steals;
+		public final int caught;
+		public final long playedMs;
+		public final long xp;
+		public final long loot;
+		public final long paid;
+		/** True once there is enough stealing for the rate to rank the method. */
+		public final boolean counts;
+
+		public Stolen(Stalls.Rotation rotation, int steals, int caught, long playedMs, long xp, long loot, long paid, boolean counts)
+		{
+			this.rotation = rotation;
+			this.steals = steals;
+			this.caught = caught;
+			this.playedMs = playedMs;
+			this.xp = xp;
+			this.loot = loot;
+			this.paid = paid;
+			this.counts = counts;
+		}
+
+		public long profit()
+		{
+			return loot - paid;
+		}
+
+		public long perHour()
+		{
+			return hourly(profit(), playedMs);
+		}
+
+		public long xpPerHour()
+		{
+			return hourly(xp, playedMs);
+		}
+
+		public long stealsPerHour()
+		{
+			return hourly(steals, playedMs);
+		}
+
+		public long perSteal()
+		{
+			return steals == 0 ? 0 : loot / steals;
+		}
+
+		/** Your experience an hour against the wiki's most for the rotation, 0 to 1. */
+		public double ofWikiXp()
+		{
+			int wiki = rotation.getWikiXpPerHour();
+			return wiki <= 0 ? 0 : Math.min(1, xpPerHour() / (double) wiki);
+		}
+	}
+
+	/** The stall sitting under way, for the plaque. */
+	public static final class Stealing
+	{
+		/** The rotation the sitting is filed under, or null below the silver stall. */
+		public final Stalls.Rotation rotation;
+		/** The stall of the last steal, or null before one. */
+		public final Stalls.Stall last;
+		public final int steals;
+		public final int caught;
+		public final long playedMs;
+		public final long profit;
+		public final long xp;
+
+		public Stealing(Stalls.Rotation rotation, Stalls.Stall last, int steals, int caught, long playedMs, long profit, long xp)
+		{
+			this.rotation = rotation;
+			this.last = last;
+			this.steals = steals;
+			this.caught = caught;
+			this.playedMs = playedMs;
+			this.profit = profit;
+			this.xp = xp;
+		}
+
+		public long perHour()
+		{
+			return playedMs < 60_000L ? 0 : hourly(profit, playedMs);
+		}
+
+		public long xpPerHour()
+		{
+			return playedMs < 60_000L ? 0 : hourly(xp, playedMs);
+		}
+	}
+
 	static long hourly(long amount, long ms)
 	{
 		return ms <= 0 ? 0 : Math.round(amount * 3_600_000.0 / ms);
@@ -307,6 +401,10 @@ public final class View
 	public final Chests chests;
 	/** False when the chest log is turned off in the settings. */
 	public final boolean chestLog;
+	/** The Port Roberts stall log by rotation, best paying first; empty when there is none or it is turned off. */
+	public final List<Stolen> stolen;
+	/** False when the stall log is turned off in the settings. */
+	public final boolean stallLog;
 
 	public View(boolean loggedIn, Account account, Planner plan, Rates rates, List<Clocked> runs, List<Logged> journal,
 		Set<Method.Category> shown, Live live, boolean bankSeen, boolean chronicle, long now)
@@ -331,6 +429,16 @@ public final class View
 		Set<Method.Category> shown, Live live, boolean bankSeen, boolean chronicle, long now, Goals goals, List<Picked> picked,
 		boolean pickLog, Chests chests, boolean chestLog)
 	{
+		this(loggedIn, account, plan, rates, runs, journal, shown, live, bankSeen, chronicle, now, goals, picked, pickLog, chests,
+			chestLog, null, true);
+	}
+
+	public View(boolean loggedIn, Account account, Planner plan, Rates rates, List<Clocked> runs, List<Logged> journal,
+		Set<Method.Category> shown, Live live, boolean bankSeen, boolean chronicle, long now, Goals goals, List<Picked> picked,
+		boolean pickLog, Chests chests, boolean chestLog, List<Stolen> stolen, boolean stallLog)
+	{
+		this.stolen = stolen == null ? Collections.emptyList() : stolen;
+		this.stallLog = stallLog;
 		this.chests = chests;
 		this.chestLog = chestLog;
 		this.picked = picked == null ? Collections.emptyList() : picked;

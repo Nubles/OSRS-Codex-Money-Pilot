@@ -20,7 +20,9 @@ public class MethodsTest
 		{
 			assertTrue(m.getId(), m.getId().matches("[a-z0-9-]+"));
 			assertTrue(m.getName(), names.add(m.getName()));
-			assertTrue(m.getUrl(), m.getUrl().startsWith("https://oldschool.runescape.wiki/w/Money_making_guide/"));
+			// A method the guide has no page for links the wiki page its estimate comes from.
+			assertTrue(m.getUrl(), m.getUrl().startsWith(m.isEstimate() ? "https://oldschool.runescape.wiki/w/"
+				: "https://oldschool.runescape.wiki/w/Money_making_guide/"));
 			assertFalse(m.getUrl(), m.getUrl().contains(" "));
 			assertTrue(m.getName(), m.getWikiPerHour() > 0);
 			assertNotNull(Methods.byId(m.getId()));
