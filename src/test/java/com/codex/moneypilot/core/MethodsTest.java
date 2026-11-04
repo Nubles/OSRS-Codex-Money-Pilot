@@ -107,6 +107,28 @@ public class MethodsTest
 		assertEquals(0, Methods.byId("corporeal-beast").getNeeds().size());
 	}
 
+	/** Sailing methods on the wiki's money making guide, read 4 November 2026 (see facts in the pull request). */
+	@Test
+	public void sailingMethodsMatchTheWiki()
+	{
+		assertNeed("frost-dragons", Need.skill(Skill.SAILING, 87));
+		assertEquals(1, Methods.byId("frost-dragons").getNeeds().size());
+		assertTrue(Methods.byId("frost-dragons").matches("Frost dragon"));
+		assertNeed("trawling-marlin", Need.skill(Skill.SAILING, 78));
+		assertNeed("trawling-marlin", Need.skill(Skill.FISHING, 91));
+		assertNeed("trawling-marlin", Need.skill(Skill.CONSTRUCTION, 72));
+		assertNeed("trawling-marlin", Need.quest(Quest.PANDEMONIUM));
+		assertFalse(Methods.byId("trawling-marlin").isTrade());
+		assertNeed("raw-yellowfin", Need.skill(Skill.SAILING, 56));
+		assertNeed("raw-yellowfin", Need.skill(Skill.CONSTRUCTION, 45));
+		assertTrue(Methods.byId("raw-yellowfin").isTrade());
+		assertEquals(1_992_179, Methods.byId("frost-dragons").getWikiPerHour());
+		assertEquals(2_005_922, Methods.byId("trawling-marlin").getWikiPerHour());
+		assertEquals(3_058_000, Methods.byId("raw-yellowfin").getWikiPerHour());
+		assertEquals("https://oldschool.runescape.wiki/w/Money_making_guide/Killing_Frost_dragons_(on-task)",
+			Methods.byId("frost-dragons").getUrl());
+	}
+
 	private static void assertNeed(String id, Need need)
 	{
 		Method m = Methods.byId(id);

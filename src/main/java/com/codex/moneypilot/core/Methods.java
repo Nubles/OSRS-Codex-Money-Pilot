@@ -19,6 +19,7 @@ import static net.runelite.api.Skill.CRAFTING;
 import static net.runelite.api.Skill.DEFENCE;
 import static net.runelite.api.Skill.FARMING;
 import static net.runelite.api.Skill.FIREMAKING;
+import static net.runelite.api.Skill.FISHING;
 import static net.runelite.api.Skill.HERBLORE;
 import static net.runelite.api.Skill.HITPOINTS;
 import static net.runelite.api.Skill.HUNTER;
@@ -27,6 +28,7 @@ import static net.runelite.api.Skill.MINING;
 import static net.runelite.api.Skill.PRAYER;
 import static net.runelite.api.Skill.RANGED;
 import static net.runelite.api.Skill.RUNECRAFT;
+import static net.runelite.api.Skill.SAILING;
 import static net.runelite.api.Skill.SLAYER;
 import static net.runelite.api.Skill.SMITHING;
 import static net.runelite.api.Skill.STRENGTH;
@@ -43,8 +45,9 @@ import net.runelite.api.gameval.VarbitID;
 /**
  * The money makers Money Pilot knows. Each one is a page of the Old School wiki's money making guide
  * (oldschool.runescape.wiki/w/Money_making_guide/...), and its needs, suggestions and profit an hour
- * were read from that page on 3 November 2026. A level is a need only where the game checks it (an
- * altar, a door, a slayer level, a spell) or the guide marks it required; the rest are suggestions.
+ * were read from that page on 3 November 2026 (the Sailing methods on 4 November 2026). A level is a need
+ * only where the game checks it (an altar, a door, a slayer level, a spell) or the guide marks it required;
+ * the rest are suggestions.
  */
 public final class Methods
 {
@@ -165,6 +168,13 @@ public final class Methods
 			.need(quest(Quest.DRAGON_SLAYER_II))
 			.suggest(skill(HITPOINTS, 90), skill(MAGIC, 75))
 			.match("Rune dragon"));
+		m.add(new Method("frost-dragons", "Killing frost dragons", "Killing Frost dragons (on-task)", COMBAT, 1_992_179,
+			"143 kills an hour, on a slayer task")
+			// Frost dragons live in Grimstone Dungeon; the monster's page: "87 Sailing to access".
+			.need(skill(SAILING, 87))
+			.suggest(skill(MAGIC, 75), skill(ATTACK, 80), skill(STRENGTH, 80), skill(PRAYER, 43),
+				note("A frost dragon slayer task"))
+			.match("Frost dragon"));
 		m.add(new Method("moons-of-peril", "Moons of Peril", "Moons of Peril", COMBAT, 1_345_861, "10 kills an hour")
 			.need(quest(Quest.PERILOUS_MOONS))
 			.suggest(skill(ATTACK, 70), skill(STRENGTH, 70), skill(DEFENCE, 70), skill(PRAYER, 70), skill(HUNTER, 20),
@@ -260,12 +270,25 @@ public final class Methods
 			// The guide: "Runecraft 85 (82 will slightly reduce profit, 40 will significantly)"; 40 is the altar.
 			.need(skill(RUNECRAFT, 40), quest(Quest.LUNAR_DIPLOMACY))
 			.suggest(skill(RUNECRAFT, 85), skill(FIREMAKING, 75), skill(MAGIC, 69)));
+		m.add(new Method("trawling-marlin", "Deep sea trawling for marlin", "Deep sea trawling for marlin", SKILLING,
+			2_005_922, "650 marlin an hour, a sloop with two cotton nets")
+			.skill(FISHING)
+			// The guide's requirements: Sailing 78, Fishing 91 (marlin shoals, boostable), Construction 72 and Pandemonium.
+			.need(skill(SAILING, 78), skill(FISHING, 91), skill(CONSTRUCTION, 72), quest(Quest.PANDEMONIUM))
+			.suggest(skill(SAILING, 92), skill(CONSTRUCTION, 84), note("A sloop, two cotton trawling nets and an eternal brazier")));
 		m.add(new Method("runite-ore-f2p", "Mining runite ore (free-to-play)", "Mining runite ore (free-to-play)",
 			SKILLING, 389_920, "about 40 ores an hour")
 			.f2p().skill(MINING)
 			.need(skill(MINING, 85)));
 
 		// ---- Processing ----
+		m.add(new Method("raw-yellowfin", "Cutting raw yellowfin", "Cutting raw yellowfin", PROCESSING, 3_058_000,
+			"about 11,000 fish an hour with a chum spreader")
+			.trade()
+			// Cut on a boat's chum facility. The guide gives Sailing as "varies": the chum station is built at
+			// Sailing 56 and Construction 45; its figure is for the chum spreader (Sailing 82, Construction 74).
+			.need(skill(SAILING, 56), skill(CONSTRUCTION, 45))
+			.suggest(skill(SAILING, 82), skill(CONSTRUCTION, 74), skill(COOKING, 99)));
 		m.add(new Method("sanfew-serum", "Making sanfew serum(4)", "Making sanfew serum(4)", PROCESSING, 2_439_000, null)
 			.trade()
 			.need(skill(HERBLORE, 65), quest(Quest.DRUIDIC_RITUAL), quest(Quest.ZOGRE_FLESH_EATERS)));
