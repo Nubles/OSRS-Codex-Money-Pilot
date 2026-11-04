@@ -14,7 +14,7 @@ public class SavedSettingsTest
 	private static final String[] FIRST = {"wilderness", "plaque", "chatLine", "fieldNotes"};
 	/** Keys added since. */
 	private static final String[] ADDED = {"runCoach", "goalCoins", "goalName", "hoursPerDay", "readGearRoadmap", "pickpocketLog",
-		"pickpocketPlaque", "pouchWarning"};
+		"pickpocketPlaque", "pouchWarning", "chestLog", "chestPlaque", "deathRisk"};
 
 	@Test
 	public void savedSettingsKeepTheirKeys()

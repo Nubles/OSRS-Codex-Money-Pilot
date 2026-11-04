@@ -1,7 +1,10 @@
 package com.codex.moneypilot;
 
 import com.codex.moneypilot.core.Account;
+import com.codex.moneypilot.core.ChestLog;
+import com.codex.moneypilot.core.ChestTracker;
 import com.codex.moneypilot.core.Coach;
+import com.codex.moneypilot.core.DeathRisk;
 import com.codex.moneypilot.core.GoalPlan;
 import com.codex.moneypilot.core.Pinned;
 import com.codex.moneypilot.core.Target;
@@ -17,9 +20,11 @@ import com.codex.moneypilot.core.Pickpockets;
 import com.codex.moneypilot.core.Planner;
 import com.codex.moneypilot.core.Rates;
 import com.codex.moneypilot.core.Clocked;
+import com.codex.moneypilot.core.RoguesChests;
 import com.codex.moneypilot.core.Run;
 import com.codex.moneypilot.notes.FieldNotes;
 import com.codex.moneypilot.ui.Actions;
+import com.codex.moneypilot.ui.ChestPlaque;
 import com.codex.moneypilot.ui.MoneyPanel;
 import com.codex.moneypilot.ui.PickpocketPlaque;
 import com.codex.moneypilot.ui.RunPlaque;
@@ -43,6 +48,16 @@ import java.util.Set;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import net.runelite.api.ChatMessageType;
+import net.runelite.api.GameObject;
+import net.runelite.api.MenuAction;
+import net.runelite.api.Player;
+import net.runelite.api.Prayer;
+import net.runelite.api.SkullIcon;
+import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.ActorDeath;
+import net.runelite.api.events.GameObjectDespawned;
+import net.runelite.api.events.GameObjectSpawned;
+import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Item;
@@ -86,13 +101,13 @@ import net.runelite.client.util.Text;
  * Codex Money Pilot: which money makers this account can do, ranked by what they pay an hour. It
  * starts from the Old School wiki's money making guide and moves to your own figures as you clock
  * runs, valuing what your bank, pack and gear gained at today's prices. It also reads the sessions
- * Codex Session Chronicle files, and keeps a pickpocket log whose rates rank the pickpocketing methods.
+ * Codex Session Chronicle files, and keeps a pickpocket log and a Rogues' Castle chest log whose rates rank those methods.
  * It reads the game and never acts in it; nothing leaves the computer.
  */
 @PluginDescriptor(
 	name = "Codex Money Pilot",
 	description = "Money makers you can do now, ranked by what they pay you an hour: wiki figures first, then your own clocked runs",
-	tags = {"codex", "money", "gp", "profit", "money making", "planner", "gp/hr", "wiki", "pickpocket", "thieving", "coin pouch"},
+	tags = {"codex", "money", "gp", "profit", "money making", "planner", "gp/hr", "wiki", "pickpocket", "thieving", "coin pouch", "rogues", "chest", "wilderness"},
 	internalName = "codex-money-pilot"
 )
 public class CodexMoneyPilotPlugin extends Plugin
@@ -107,6 +122,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 	private static final String TAB_KEY = "tab";
 	private static final String HIDDEN_KEY = "hidden";
 	private static final String PICKS_KEY = "pickpockets";
+	private static final String CHESTS_KEY = "rogueChests";
 	/** The plaque shows while the last pick was this recent. */
 	private static final int PLAQUE_TICKS = 100;
 	/** Runs kept, newest first. */
@@ -150,6 +166,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 	private NavigationButton navButton;
 	private RunPlaque plaque;
 	private PickpocketPlaque pickPlaque;
+	private ChestPlaque chestPlaque;
 	private FieldNotes notes;
 
 	private Account account = Account.UNKNOWN;
@@ -183,6 +200,15 @@ public class CodexMoneyPilotPlugin extends Plugin
 	private boolean pickRefresh;
 	/** True once the pouch warning has been said, until the pouches are opened. */
 	private boolean pouchWarned;
+	private ChestLog chestLog = new ChestLog();
+	private ChestTracker chests = new ChestTracker(chestLog);
+	/** The looting bag's contents as the game last sent them; null until it does. */
+	private Map<Integer, Long> lootingBag;
+	private volatile View.Looting looting;
+	private boolean chestsDirty;
+	/** The profile the chest log was read from, so it is saved back there even after the profile changes. */
+	private String chestsProfile;
+	private boolean chestRefresh;
 	private final Set<Method.Category> shown = EnumSet.allOf(Method.Category.class);
 
 	private int accountTicks = -1;
@@ -217,6 +243,8 @@ public class CodexMoneyPilotPlugin extends Plugin
 		overlayManager.add(plaque);
 		pickPlaque = new PickpocketPlaque(() -> config.pickpocketPlaque() && config.pickpocketLog() ? picking : null);
 		overlayManager.add(pickPlaque);
+		chestPlaque = new ChestPlaque(() -> config.chestPlaque() && config.chestLog() ? looting : null);
+		overlayManager.add(chestPlaque);
 		clientThread.invokeLater(() ->
 		{
 			if (client.getGameState() == GameState.LOGGED_IN)
@@ -234,8 +262,10 @@ public class CodexMoneyPilotPlugin extends Plugin
 		saveRun();
 		saveBank();
 		savePicks();
+		saveChests();
 		overlayManager.remove(plaque);
 		overlayManager.remove(pickPlaque);
+		overlayManager.remove(chestPlaque);
 		clientToolbar.removeNavigation(navButton);
 		if (notes != null)
 		{
@@ -245,7 +275,13 @@ public class CodexMoneyPilotPlugin extends Plugin
 		panel = null;
 		plaque = null;
 		pickPlaque = null;
+		chestPlaque = null;
 		picking = null;
+		looting = null;
+		chestLog = new ChestLog();
+		chests = new ChestTracker(chestLog);
+		chestsProfile = null;
+		lootingBag = null;
 		pickLog = new PickpocketLog();
 		tracker = new PickpocketTracker(pickLog);
 		picksProfile = null;
@@ -281,13 +317,22 @@ public class CodexMoneyPilotPlugin extends Plugin
 			// The quest log and varbits settle a couple of ticks after login.
 			accountTicks = 2;
 		}
+		else if (event.getGameState() == GameState.LOADING)
+		{
+			// The chests in view are sent again once the scene has loaded.
+			chests.sceneCleared();
+		}
 		else if (event.getGameState() == GameState.LOGIN_SCREEN)
 		{
 			saveRun();
 			saveBank();
 			savePicks();
+			saveChests();
 			tracker.reset();
+			chests.reset();
+			lootingBag = null;
 			picking = null;
+			looting = null;
 			account = Account.UNKNOWN;
 			loaded = false;
 			refresh();
@@ -299,6 +344,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 	{
 		saveRun();
 		savePicks();
+		saveChests();
 		load();
 		accountTicks = 2;
 	}
@@ -335,6 +381,10 @@ public class CodexMoneyPilotPlugin extends Plugin
 		{
 			changed |= pickTick();
 		}
+		if (config.chestLog() && client.getGameState() == GameState.LOGGED_IN)
+		{
+			changed |= chestTick();
+		}
 		if (changed)
 		{
 			refresh();
@@ -344,6 +394,10 @@ public class CodexMoneyPilotPlugin extends Plugin
 	@Subscribe
 	public void onStatChanged(StatChanged event)
 	{
+		if (event.getSkill() == Skill.THIEVING && config.chestLog())
+		{
+			chests.thievingXp(event.getXp(), System.currentTimeMillis());
+		}
 		// A level gained can open a method; read the account again soon, not every tick.
 		if (account.isKnown() && event.getLevel() != account.level(event.getSkill()) && (accountTicks < 0 || accountTicks > 3))
 		{
@@ -370,17 +424,93 @@ public class CodexMoneyPilotPlugin extends Plugin
 			NPC npc = event.getMenuEntry().getNpc();
 			tracker.aim(npc == null ? null : Text.removeTags(npc.getName()));
 		}
+		if (config.chestLog() && isObjectOption(event.getMenuAction()) && RoguesChests.isChest(event.getId()))
+		{
+			chests.chose(Text.removeTags(event.getMenuOption()), event.getId());
+		}
+	}
+
+	private static boolean isObjectOption(MenuAction action)
+	{
+		return action == MenuAction.GAME_OBJECT_FIRST_OPTION || action == MenuAction.GAME_OBJECT_SECOND_OPTION
+			|| action == MenuAction.GAME_OBJECT_THIRD_OPTION || action == MenuAction.GAME_OBJECT_FOURTH_OPTION
+			|| action == MenuAction.GAME_OBJECT_FIFTH_OPTION;
+	}
+
+	@Subscribe
+	public void onHitsplatApplied(HitsplatApplied event)
+	{
+		if (config.chestLog() && event.getActor() == client.getLocalPlayer() && event.getHitsplat() != null)
+		{
+			chests.hit(event.getHitsplat().getAmount(), System.currentTimeMillis());
+		}
+	}
+
+	@Subscribe
+	public void onActorDeath(ActorDeath event)
+	{
+		if (config.chestLog() && event.getActor() == client.getLocalPlayer())
+		{
+			chests.died();
+			lootingBag = null;
+		}
+	}
+
+	@Subscribe
+	public void onGameObjectSpawned(GameObjectSpawned event)
+	{
+		GameObject o = event.getGameObject();
+		if (o != null && RoguesChests.isChest(o.getId()))
+		{
+			chests.chest(where(o.getWorldLocation()), o.getId());
+		}
+	}
+
+	@Subscribe
+	public void onGameObjectDespawned(GameObjectDespawned event)
+	{
+		GameObject o = event.getGameObject();
+		if (o != null && RoguesChests.isChest(o.getId()))
+		{
+			chests.chestGone(where(o.getWorldLocation()), o.getId());
+		}
+	}
+
+	private static long where(WorldPoint p)
+	{
+		return p == null ? 0 : ((long) p.getPlane() << 40) | ((long) p.getX() << 20) | p.getY();
 	}
 
 	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
 		int id = event.getContainerId();
-		if (id != InventoryID.INV && id != InventoryID.WORN && id != InventoryID.BANK && id != InventoryID.SEED_BOX)
+		if (id != InventoryID.INV && id != InventoryID.WORN && id != InventoryID.BANK && id != InventoryID.SEED_BOX
+			&& id != InventoryID.LOOTING_BAG)
 		{
 			return;
 		}
 		Map<Integer, Long> items = read(event.getItemContainer());
+		if (id == InventoryID.LOOTING_BAG)
+		{
+			lootingBag = items;
+			if (config.chestLog())
+			{
+				chests.bag(items, banking());
+			}
+			return;
+		}
+		if (config.chestLog())
+		{
+			if (id == InventoryID.INV)
+			{
+				chests.pack(items, banking());
+			}
+			else if (id == InventoryID.WORN)
+			{
+				chests.worn(items);
+			}
+		}
 		if (id == InventoryID.INV || id == InventoryID.SEED_BOX)
 		{
 			if (id == InventoryID.INV)
@@ -468,7 +598,18 @@ public class CodexMoneyPilotPlugin extends Plugin
 			});
 			return;
 		}
-		if ("wilderness".equals(event.getKey()) || "pickpocketLog".equals(event.getKey()) || "pouchWarning".equals(event.getKey()) || "goalCoins".equals(event.getKey()) || "goalName".equals(event.getKey())
+		if ("chestLog".equals(event.getKey()) && !config.chestLog())
+		{
+			clientThread.invokeLater(() ->
+			{
+				saveChests();
+				chests.reset();
+				looting = null;
+				refresh();
+			});
+			return;
+		}
+		if ("wilderness".equals(event.getKey()) || "pickpocketLog".equals(event.getKey()) || "chestLog".equals(event.getKey()) || "pouchWarning".equals(event.getKey()) || "goalCoins".equals(event.getKey()) || "goalName".equals(event.getKey())
 			|| "hoursPerDay".equals(event.getKey()) || "readGearRoadmap".equals(event.getKey()) || "runCoach".equals(event.getKey()))
 		{
 			clientThread.invokeLater(() ->
@@ -677,6 +818,82 @@ public class CodexMoneyPilotPlugin extends Plugin
 		return out;
 	}
 
+	// ---- Rogues' Castle chests ----
+
+	/** A tick of the chest log; true when the panel should be rebuilt. */
+	private boolean chestTick()
+	{
+		long now = System.currentTimeMillis();
+		chests.tick(this::isEdible, now);
+		boolean filed = chests.takeChanged();
+		if (filed)
+		{
+			chestsDirty = true;
+		}
+		long since = chests.sinceLastOpen();
+		boolean there = chests.chestsSeen() > 0;
+		if (!config.chestPlaque() || (!there && (since < 0 || since > PLAQUE_TICKS)))
+		{
+			looting = null;
+		}
+		else
+		{
+			ChestLog.Counts live = chests.isLooting() ? chests.getLive() : null;
+			DeathRisk risk = config.deathRisk() ? risk() : null;
+			looting = new View.Looting(live == null ? 0 : live.getOpens(), live == null ? 0 : live.getTrapped(),
+				live == null ? 0 : live.getDeaths(), live == null ? 0 : live.getPlayedMs(), live == null ? 0 : live.profit(this::price),
+				live == null ? 0 : live.getXp(), chests.chestsSeen(), chests.chestsReady(), chests.nextReady(),
+				risk == null ? -1 : risk.getLost(), risk == null ? 0 : risk.getKept());
+		}
+		if (chestsDirty && tickCount % SAVE_TICKS == 0)
+		{
+			saveChests();
+		}
+		chestRefresh |= filed;
+		if (chestRefresh && tickCount % LIVE_TICKS == 0)
+		{
+			chestRefresh = false;
+			return true;
+		}
+		return false;
+	}
+
+	/** What a death now would cost; null for an ultimate ironman, whose rules differ. */
+	private DeathRisk risk()
+	{
+		Player me = client.getLocalPlayer();
+		if (me == null || client.getVarbitValue(VarbitID.IRONMAN) == 2)
+		{
+			return null;
+		}
+		int skull = me.getSkullIcon();
+		boolean skulled = skull >= 0 && skull != SkullIcon.SKULL_FIGHT_PIT && skull != SkullIcon.FORINTHRY_SURGE;
+		Map<Integer, Long> carried = new HashMap<>(inventory);
+		worn.forEach((k, v) -> carried.merge(k, v, Long::sum));
+		return DeathRisk.of(carried, lootingBag, DeathRisk.kept(skulled, client.isPrayerActive(Prayer.PROTECT_ITEM), false),
+			this::price);
+	}
+
+	private void forgetChests()
+	{
+		chestLog.forget();
+		chestsDirty = true;
+		saveChests();
+		refresh();
+	}
+
+	/** The chest log as the panel shows it, valued at today's prices; null with nothing logged. */
+	private View.Chests chested(long now)
+	{
+		ChestLog.Counts c = chestLog.tally(now);
+		if (c == null)
+		{
+			return null;
+		}
+		return new View.Chests(c.getOpens(), c.getTrapped(), c.getDeaths(), c.getPlayedMs(), c.getXp(), c.lootValue(this::price),
+			c.usedValue(this::price), c.lostValue(this::price), c.getPlayedMs() >= Rates.ENOUGH_MS);
+	}
+
 	// ---- Runs ----
 
 	private Holdings holdings()
@@ -852,6 +1069,12 @@ public class CodexMoneyPilotPlugin extends Plugin
 		tracker = new PickpocketTracker(pickLog);
 		picking = null;
 		picksDirty = false;
+		chestsProfile = configManager.getRSProfileKey();
+		chestLog = ChestLog.decode(gson, configManager.getRSProfileConfiguration(CodexMoneyPilotConfig.GROUP, CHESTS_KEY));
+		chestLog.prune(System.currentTimeMillis());
+		chests = new ChestTracker(chestLog);
+		looting = null;
+		chestsDirty = false;
 	}
 
 	private void saveRuns()
@@ -884,6 +1107,23 @@ public class CodexMoneyPilotPlugin extends Plugin
 				configManager.setConfiguration(CodexMoneyPilotConfig.GROUP, picksProfile, PICKS_KEY, pickLog.encode(gson));
 			}
 			picksDirty = false;
+		}
+	}
+
+	private void saveChests()
+	{
+		if (chestsDirty && chestsProfile != null)
+		{
+			chestLog.prune(System.currentTimeMillis());
+			if (chestLog.isEmpty())
+			{
+				configManager.unsetConfiguration(CodexMoneyPilotConfig.GROUP, chestsProfile, CHESTS_KEY);
+			}
+			else
+			{
+				configManager.setConfiguration(CodexMoneyPilotConfig.GROUP, chestsProfile, CHESTS_KEY, chestLog.encode(gson));
+			}
+			chestsDirty = false;
 		}
 	}
 
@@ -954,11 +1194,13 @@ public class CodexMoneyPilotPlugin extends Plugin
 		}
 		long now = System.currentTimeMillis();
 		boolean loggedIn = client.getGameState() == GameState.LOGGED_IN && account.isKnown();
-		Rates rates = Rates.of(runs, journal, config.pickpocketLog() ? pickLog.rates(now, this::price) : null, now);
+		Rates rates = Rates.of(runs, journal, config.pickpocketLog() ? pickLog.rates(now, this::price) : null,
+			config.chestLog() ? chestLog.rates(now, this::price) : null, now);
 		Planner plan = loggedIn ? Planner.plan(Methods.all(), account, rates, new Planner.Filter(shown, config.wilderness())) : null;
 		View.Goals goals = plan == null ? View.Goals.NONE : goals(plan, rates);
 		View view = new View(loggedIn, account, plan, rates, new ArrayList<>(runs), journal, shown, live, bank != null, chronicle, now,
-			goals, config.pickpocketLog() ? picked(now) : null, config.pickpocketLog());
+			goals, config.pickpocketLog() ? picked(now) : null, config.pickpocketLog(), config.chestLog() ? chested(now) : null,
+			config.chestLog());
 		if (plan != null && notes != null && notes.isOpen())
 		{
 			JsonObject n = new JsonObject();
@@ -1087,6 +1329,12 @@ public class CodexMoneyPilotPlugin extends Plugin
 		public void forgetPicks(Pickpockets.Target target)
 		{
 			clientThread.invokeLater(() -> CodexMoneyPilotPlugin.this.forgetPicks(target));
+		}
+
+		@Override
+		public void forgetChests()
+		{
+			clientThread.invokeLater(CodexMoneyPilotPlugin.this::forgetChests);
 		}
 
 		@Override

@@ -59,6 +59,21 @@ the list follows how you actually play.
 
 ![Pickpocket log](docs/pickpocket-log.png) ![Pickpocket plaque](docs/pickpocket-plaque.png)
 
+- **Rogues' Castle chest log**: search the chests at the Rogues' Castle and Money Pilot logs your own
+  looting, for each account: chests opened (a chest counts when Thieving experience follows your
+  "Search for traps"), the Thieving experience itself, the loot (also when it goes into an open
+  looting bag), the food and potion doses you used, chests opened without searching that the trap hit,
+  and deaths while looting, with what was gone after each death counted against the rate. Your rates
+  shows loot per chest, experience and profit an hour, and after a quarter of an hour of looting your
+  rate ranks the method in Best now, as the pickpocket log does.
+- **Chest plaque**: at the chests, a plaque shows the sitting's rate and experience an hour, how many of
+  the chests in view stand ready and when the next one restocks (34 ticks after it was seen open), and
+  **if you die now**: what you carry less the three most valuable items (none when skulled, one more
+  with Protect Item), plus anything in a looting bag, at today's prices. It is a figure to read, not an
+  alarm; Codex Guardian keeps watch for player killers.
+
+![Rogues' Castle chest log](docs/rogues-chest-log.png) ![Chest plaque](docs/rogues-chest-plaque.png)
+
 ![A method opened](docs/best-open.png) ![Within reach](docs/reach.png) ![Your rates](docs/yours.png)
 
 ![Goal](docs/goal.png) ![Run coach](docs/coach.png)
@@ -100,6 +115,10 @@ plans for the coins goal in the settings, or says how to set one.
   so picks of an elf or vyre before its first pouch wait until then, and picks of NPCs it does not log
   (men, H.A.M. members) are left out. Pouches count when you open them. Seeds that go straight into
   a seed box count only if the game shows the box changing.
+- The chest log's "if you die now" uses RuneLite's item prices to choose the kept items, where the game
+  uses its own values, and treats a stack as single items (three runes of a stack are three kept
+  items), so it says what a death would roughly cost. It is not worked out for ultimate ironmen, whose
+  rules differ.
 - Money Pilot reads the game and never acts in it. It shows numbers and wiki links, never what to
   click. Nothing leaves your computer.
 
@@ -137,6 +156,7 @@ The full list, with each page's wording, is in `MethodsTest.gatesMatchTheWiki` a
 - **Run coach** (on): the coach's line on the plaque and the panel while a run is clocked
 - **Pickpocketing**: *Log pickpocketing* (on), *Pickpocket plaque* (on) and *Pouch warning* (3
   pouches before the cap; 0 for none)
+- **Rogues' Castle chests**: *Log the chests* (on), *Chest plaque* (on) and *If you die now* (on)
 - **Goal**: *Coins goal (thousands)* (0, none), *Coins goal name*, *Hours played a day* (2), and
   *Plan Gear Roadmap's goal* (on)
 - **Keep field notes** (off): a local record of what the plugin reads and decides, for checking its
