@@ -28,4 +28,7 @@ public interface Actions
 
 	/** Forget the pickpocket log of a target. */
 	void forgetPicks(Pickpockets.Target target);
+
+	/** Forget the Rogues' Castle chest log. */
+	void forgetChests();
 }

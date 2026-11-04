@@ -157,6 +157,51 @@ public interface CodexMoneyPilotConfig extends Config
 	}
 
 	@ConfigSection(
+		name = "Rogues' Castle chests",
+		description = "The chest log: your own loot, Thieving experience and rate an hour at the Rogues' Castle chests",
+		position = 30
+	)
+	String CHESTS = "chestSection";
+
+	@ConfigItem(
+		keyName = "chestLog",
+		name = "Log the chests",
+		description = "Count the Rogues' Castle chests you open, their loot, your Thieving experience, supplies and what a death took, "
+			+ "and rank the method by your own rate once you have a quarter of an hour of looting",
+		section = CHESTS,
+		position = 0
+	)
+	default boolean chestLog()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "chestPlaque",
+		name = "Chest plaque",
+		description = "At the Rogues' Castle chests, show the rate, Thieving experience an hour and which chests are ready on the game screen",
+		section = CHESTS,
+		position = 1
+	)
+	default boolean chestPlaque()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "deathRisk",
+		name = "If you die now",
+		description = "On the chest plaque, show what a death right now would cost: what you carry less the items you would keep, "
+			+ "at today's prices. A figure only; Codex Guardian keeps watch for player killers",
+		section = CHESTS,
+		position = 2
+	)
+	default boolean deathRisk()
+	{
+		return true;
+	}
+
+	@ConfigSection(
 		name = "Field notes",
 		description = "A local record for checking the plugin's guesses",
 		position = 99,

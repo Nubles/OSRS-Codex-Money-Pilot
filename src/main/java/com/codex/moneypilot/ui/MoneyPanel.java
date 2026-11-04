@@ -323,6 +323,7 @@ public class MoneyPanel extends PluginPanel
 		}
 
 		pickpockets(s);
+		chests(s);
 
 		List<Method> chronicled = new ArrayList<>();
 		for (Method m : Methods.all())
@@ -425,6 +426,81 @@ public class MoneyPanel extends PluginPanel
 		buttons.setOpaque(false);
 		Pickpockets.Target target = p.target;
 		buttons.add(new CodexButton("Forget log", false, 18, () -> actions.forgetPicks(target)));
+		body.add(buttons);
+		card.add(head, BorderLayout.NORTH);
+		card.add(body, BorderLayout.CENTER);
+		return card;
+	}
+
+	// ---- Rogues' Castle chest log ----
+
+	private void chests(StackPanel s)
+	{
+		if (!view.chestLog)
+		{
+			return;
+		}
+		View.Chests c = view.chests;
+		s.add(new SectionHeader("Rogues' Castle chests", c == null ? null : whole(c.opens)));
+		if (c == null)
+		{
+			s.add(note("Search the chests at the Rogues' Castle and your own loot per chest, Thieving experience and rate an "
+				+ "hour gather here, with a death's losses counted against it. After a quarter of an hour of looting, your "
+				+ "rate ranks the method in Best now."));
+			return;
+		}
+		s.add(chestCard(c));
+		s.add(note("Your own counts over the last " + Rates.DAYS + " days: a chest counts when Thieving experience follows "
+			+ "your search. Loot, supplies and what a death took are valued at today's prices, and a death counts against "
+			+ "the rate even if you got your items back from a grave."));
+	}
+
+	private Card chestCard(View.Chests c)
+	{
+		Card card = new Card(new BorderLayout(0, 4)).accent(Theme.TEAL);
+		JPanel head = row();
+		head.add(Ui.wrapped("Stealing from the chests", Theme.body(), Theme.TEXT, TEXT - 50), BorderLayout.CENTER);
+		head.add(top(rateLabel(c.perHour())), BorderLayout.EAST);
+		JPanel body = column();
+		JPanel figures = new JPanel(new GridLayout(1, 3, 6, 0));
+		figures.setOpaque(false);
+		figures.add(stat("PER CHEST", Format.gp(c.perOpen()), Theme.GOLD));
+		figures.add(stat("XP/HR", c.playedMs <= 0 ? "-" : Format.gp(c.xpPerHour()), Theme.TEXT));
+		figures.add(stat("DEATHS", String.valueOf(c.deaths), c.deaths == 0 ? Theme.TEXT : Theme.EMBER));
+		body.add(figures);
+		double searched = c.searchedRate();
+		JPanel bar = new JPanel(new BorderLayout());
+		bar.setOpaque(false);
+		bar.setBorder(new EmptyBorder(3, 0, 3, 0));
+		bar.add(SplitBar.progress(searched, Theme.progressColor(searched)), BorderLayout.CENTER);
+		body.add(bar);
+		body.add(Ui.wrapped(whole(c.opens) + (c.opens == 1 ? " chest" : " chests") + " in " + Format.duration(c.playedMs) + ", "
+			+ whole(c.opensPerHour()) + " an hour", Theme.small(), Theme.TEXT_MUTED, TEXT));
+		if (c.trapped > 0)
+		{
+			body.add(Ui.wrapped(whole(c.trapped) + " opened without searching: the trap hit.", Theme.small(), Theme.EMBER,
+				TEXT));
+		}
+		String used = c.used <= 0 ? "no supplies used" : "supplies " + Format.gp(c.used);
+		String lost = c.deaths == 0 ? "" : ", " + Format.gp(c.lost) + " gone after " + (c.deaths == 1 ? "a death" : c.deaths
+			+ " deaths");
+		body.add(Ui.wrapped("Loot " + Format.gp(c.loot) + ", " + used + lost + ".", Theme.small(), Theme.TEXT_MUTED, TEXT));
+		Method m = Methods.byId(com.codex.moneypilot.core.RoguesChests.METHOD);
+		if (!c.counts)
+		{
+			body.add(Ui.wrapped("Ranks once you have " + Format.duration(Rates.ENOUGH_MS) + " of looting.", Theme.small(),
+				Theme.GOLD_DIM, TEXT));
+		}
+		else if (m != null)
+		{
+			long wiki = m.getWikiPerHour();
+			String vs = wiki <= 0 ? "" : ": " + Math.round(c.perHour() * 100.0 / wiki) + "% of the wiki's " + Format.gp(wiki);
+			body.add(Ui.wrapped("Ranks stealing from Rogues' Castle chests in Best now" + vs + ".", Theme.small(),
+				Theme.TEXT_FAINT, TEXT));
+		}
+		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		buttons.setOpaque(false);
+		buttons.add(new CodexButton("Forget log", false, 18, actions::forgetChests));
 		body.add(buttons);
 		card.add(head, BorderLayout.NORTH);
 		card.add(body, BorderLayout.CENTER);
@@ -750,6 +826,7 @@ public class MoneyPanel extends PluginPanel
 		}
 		String who = rate.getSource() == com.codex.moneypilot.core.Rate.Source.YOURS ? "your own "
 			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.PICKPOCKETS ? "your picks' "
+			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.CHESTS ? "your chests' "
 			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.SESSIONS ? "your sessions' " : "the wiki's ";
 		return who + Format.gp(rate.getPerHour()) + "/hr";
 	}
@@ -893,6 +970,12 @@ public class MoneyPanel extends PluginPanel
 		{
 			d.add(payLine("Your picks", picks.getPerHour(), String.format(Locale.ENGLISH, "%,d", picks.getCount())
 				+ " picks logged, " + Format.duration(picks.getPlayedMs()), Theme.TEAL));
+		}
+		Rate chests = view.rates.chests(m);
+		if (chests != null)
+		{
+			d.add(payLine("Your chests", chests.getPerHour(), String.format(Locale.ENGLISH, "%,d", chests.getCount())
+				+ " chests logged, " + Format.duration(chests.getPlayedMs()), Theme.TEAL));
 		}
 		if (sessions != null)
 		{

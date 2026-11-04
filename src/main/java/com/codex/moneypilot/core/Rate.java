@@ -9,6 +9,8 @@ public final class Rate
 		YOURS("Yours"),
 		/** Money Pilot's pickpocket log, kept as you pick. */
 		PICKPOCKETS("Your picks"),
+		/** Money Pilot's Rogues' Castle chest log, kept as you loot. */
+		CHESTS("Your chests"),
 		/** Session Chronicle's sessions spent on the method. */
 		SESSIONS("Your sessions"),
 		/** The wiki's money making guide. */

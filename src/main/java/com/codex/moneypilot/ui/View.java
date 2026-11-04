@@ -178,6 +178,115 @@ public final class View
 		}
 	}
 
+	/** The Rogues' Castle chest log over the last 60 days, valued at today's prices. */
+	public static final class Chests
+	{
+		public final int opens;
+		public final int trapped;
+		public final int deaths;
+		public final long playedMs;
+		public final long xp;
+		public final long loot;
+		public final long used;
+		public final long lost;
+		/** True once there is enough looting for the rate to rank the method. */
+		public final boolean counts;
+
+		public Chests(int opens, int trapped, int deaths, long playedMs, long xp, long loot, long used, long lost, boolean counts)
+		{
+			this.opens = opens;
+			this.trapped = trapped;
+			this.deaths = deaths;
+			this.playedMs = playedMs;
+			this.xp = xp;
+			this.loot = loot;
+			this.used = used;
+			this.lost = lost;
+			this.counts = counts;
+		}
+
+		public long profit()
+		{
+			return loot - used - lost;
+		}
+
+		public long perHour()
+		{
+			return hourly(profit(), playedMs);
+		}
+
+		public long xpPerHour()
+		{
+			return hourly(xp, playedMs);
+		}
+
+		public long opensPerHour()
+		{
+			return hourly(opens, playedMs);
+		}
+
+		public long perOpen()
+		{
+			return opens == 0 ? 0 : loot / opens;
+		}
+
+		/** Of the chests you went for, the share you searched first; 1 with none. */
+		public double searchedRate()
+		{
+			int all = opens + trapped;
+			return all == 0 ? 1 : opens / (double) all;
+		}
+	}
+
+	/** The chest sitting under way and the chests in view, for the plaque. */
+	public static final class Looting
+	{
+		public final int opens;
+		public final int trapped;
+		public final int deaths;
+		public final long playedMs;
+		public final long profit;
+		public final long xp;
+		/** Chests in view and how many stand closed; ticks to the next restock, -1 with none in view. */
+		public final int seen;
+		public final int ready;
+		public final long nextTicks;
+		/** What a death now would cost and how many items you would keep; risk -1 when it is not worked out. */
+		public final long risk;
+		public final int kept;
+
+		public Looting(int opens, int trapped, int deaths, long playedMs, long profit, long xp, int seen, int ready, long nextTicks,
+			long risk, int kept)
+		{
+			this.opens = opens;
+			this.trapped = trapped;
+			this.deaths = deaths;
+			this.playedMs = playedMs;
+			this.profit = profit;
+			this.xp = xp;
+			this.seen = seen;
+			this.ready = ready;
+			this.nextTicks = nextTicks;
+			this.risk = risk;
+			this.kept = kept;
+		}
+
+		public long perHour()
+		{
+			return playedMs < 60_000L ? 0 : hourly(profit, playedMs);
+		}
+
+		public long xpPerHour()
+		{
+			return playedMs < 60_000L ? 0 : hourly(xp, playedMs);
+		}
+	}
+
+	static long hourly(long amount, long ms)
+	{
+		return ms <= 0 ? 0 : Math.round(amount * 3_600_000.0 / ms);
+	}
+
 	public final boolean loggedIn;
 	public final Account account;
 	public final Planner plan;
@@ -194,6 +303,10 @@ public final class View
 	public final List<Picked> picked;
 	/** False when the pickpocket log is turned off in the settings. */
 	public final boolean pickLog;
+	/** The Rogues' Castle chest log; null when there is none or it is turned off. */
+	public final Chests chests;
+	/** False when the chest log is turned off in the settings. */
+	public final boolean chestLog;
 
 	public View(boolean loggedIn, Account account, Planner plan, Rates rates, List<Clocked> runs, List<Logged> journal,
 		Set<Method.Category> shown, Live live, boolean bankSeen, boolean chronicle, long now)
@@ -211,6 +324,15 @@ public final class View
 		Set<Method.Category> shown, Live live, boolean bankSeen, boolean chronicle, long now, Goals goals, List<Picked> picked,
 		boolean pickLog)
 	{
+		this(loggedIn, account, plan, rates, runs, journal, shown, live, bankSeen, chronicle, now, goals, picked, pickLog, null, true);
+	}
+
+	public View(boolean loggedIn, Account account, Planner plan, Rates rates, List<Clocked> runs, List<Logged> journal,
+		Set<Method.Category> shown, Live live, boolean bankSeen, boolean chronicle, long now, Goals goals, List<Picked> picked,
+		boolean pickLog, Chests chests, boolean chestLog)
+	{
+		this.chests = chests;
+		this.chestLog = chestLog;
 		this.picked = picked == null ? Collections.emptyList() : picked;
 		this.pickLog = pickLog;
 		this.goals = goals == null ? Goals.NONE : goals;
