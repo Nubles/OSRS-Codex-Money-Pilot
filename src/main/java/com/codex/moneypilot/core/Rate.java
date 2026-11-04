@@ -7,6 +7,8 @@ public final class Rate
 	{
 		/** Runs clocked with Money Pilot. */
 		YOURS("Yours"),
+		/** Money Pilot's pickpocket log, kept as you pick. */
+		PICKPOCKETS("Your picks"),
 		/** Session Chronicle's sessions spent on the method. */
 		SESSIONS("Your sessions"),
 		/** The wiki's money making guide. */

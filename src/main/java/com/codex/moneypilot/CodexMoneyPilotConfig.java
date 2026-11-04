@@ -112,6 +112,51 @@ public interface CodexMoneyPilotConfig extends Config
 	}
 
 	@ConfigSection(
+		name = "Pickpocketing",
+		description = "The pickpocket log: your own success rate and rate an hour at each target Money Pilot ranks",
+		position = 20
+	)
+	String PICKPOCKETING = "pickpocketSection";
+
+	@ConfigItem(
+		keyName = "pickpocketLog",
+		name = "Log pickpocketing",
+		description = "Count your picks, stuns, coin pouches, loot and food at Ardougne knights, paladins, Master Farmers, vyres and elves, "
+			+ "and rank those methods by your own rate once you have a quarter of an hour of picking",
+		section = PICKPOCKETING,
+		position = 0
+	)
+	default boolean pickpocketLog()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "pickpocketPlaque",
+		name = "Pickpocket plaque",
+		description = "While pickpocketing a logged target, show the rate, your success rate, stuns and coin pouches on the game screen",
+		section = PICKPOCKETING,
+		position = 1
+	)
+	default boolean pickpocketPlaque()
+	{
+		return true;
+	}
+
+	@Range(max = 20)
+	@ConfigItem(
+		keyName = "pouchWarning",
+		name = "Pouch warning",
+		description = "Warn this many coin pouches before you can hold no more, on the plaque and once in chat. 0 for no warning",
+		section = PICKPOCKETING,
+		position = 2
+	)
+	default int pouchWarning()
+	{
+		return 3;
+	}
+
+	@ConfigSection(
 		name = "Field notes",
 		description = "A local record for checking the plugin's guesses",
 		position = 99,

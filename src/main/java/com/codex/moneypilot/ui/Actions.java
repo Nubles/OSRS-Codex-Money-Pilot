@@ -1,6 +1,7 @@
 package com.codex.moneypilot.ui;
 
 import com.codex.moneypilot.core.Method;
+import com.codex.moneypilot.core.Pickpockets;
 
 /** What the panel's buttons ask the plugin to do. */
 public interface Actions
@@ -24,4 +25,7 @@ public interface Actions
 
 	/** Forget every clocked run of a method. */
 	void forget(Method method);
+
+	/** Forget the pickpocket log of a target. */
+	void forgetPicks(Pickpockets.Target target);
 }

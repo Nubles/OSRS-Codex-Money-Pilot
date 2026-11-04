@@ -8,6 +8,7 @@ import com.codex.moneypilot.core.Target;
 import com.codex.moneypilot.core.Method;
 import com.codex.moneypilot.core.Methods;
 import com.codex.moneypilot.core.Need;
+import com.codex.moneypilot.core.Pickpockets;
 import com.codex.moneypilot.core.Planner;
 import com.codex.moneypilot.core.Rate;
 import com.codex.moneypilot.core.Rates;
@@ -321,6 +322,8 @@ public class MoneyPanel extends PluginPanel
 			}
 		}
 
+		pickpockets(s);
+
 		List<Method> chronicled = new ArrayList<>();
 		for (Method m : Methods.all())
 		{
@@ -354,6 +357,83 @@ public class MoneyPanel extends PluginPanel
 			}
 		}
 		return s;
+	}
+
+	// ---- Pickpocket log ----
+
+	private void pickpockets(StackPanel s)
+	{
+		if (!view.pickLog)
+		{
+			return;
+		}
+		s.add(new SectionHeader("Pickpocket log", view.picked.isEmpty() ? null : String.valueOf(view.picked.size())));
+		if (view.picked.isEmpty())
+		{
+			s.add(note("Pickpocket Ardougne knights, paladins, Master Farmers, vyres or elves and your own success rate, stuns, "
+				+ "coin pouches, food and rate an hour gather here. After a quarter of an hour of picking, your rate ranks the "
+				+ "method in Best now."));
+			return;
+		}
+		for (View.Picked p : view.picked)
+		{
+			s.add(pickedCard(p));
+		}
+		s.add(note("Your own counts from the game's messages, over the last " + Rates.DAYS + " days. Loot and food are valued "
+			+ "at today's prices; coin pouches count when you open them."));
+	}
+
+	private Card pickedCard(View.Picked p)
+	{
+		Card card = new Card(new BorderLayout(0, 4)).accent(Theme.TEAL);
+		JPanel head = row();
+		head.add(Ui.wrapped(p.target.getTitle(), Theme.body(), Theme.TEXT, TEXT - 50), BorderLayout.CENTER);
+		head.add(top(rateLabel(p.perHour())), BorderLayout.EAST);
+		JPanel body = column();
+		JPanel figures = new JPanel(new GridLayout(1, 3, 6, 0));
+		figures.setOpaque(false);
+		double rate = p.successRate();
+		figures.add(stat("SUCCESS", p.attempts == 0 ? "-" : Math.round(rate * 100) + "%", Theme.progressColor(rate)));
+		figures.add(stat("STUNS", String.valueOf(p.stuns), p.stuns == 0 ? Theme.TEXT : Theme.EMBER));
+		figures.add(stat(p.target.hasPouch() ? "POUCHES" : "PICKS", whole(p.target.hasPouch() ? p.opened : p.successes),
+			Theme.TEXT));
+		body.add(figures);
+		JPanel bar = new JPanel(new BorderLayout());
+		bar.setOpaque(false);
+		bar.setBorder(new EmptyBorder(3, 0, 3, 0));
+		bar.add(SplitBar.progress(rate, Theme.progressColor(rate)), BorderLayout.CENTER);
+		body.add(bar);
+		body.add(Ui.wrapped(whole(p.successes) + " of " + whole(p.attempts) + " picks in " + Format.duration(p.playedMs) + ", "
+			+ whole(p.picksPerHour) + " an hour", Theme.small(), Theme.TEXT_MUTED, TEXT));
+		String food = p.food <= 0 && p.foodPerHour <= 0 ? "no food used"
+			: "food " + Format.gp(p.food) + " (" + Math.round(p.foodPerHour) + " an hour)";
+		body.add(Ui.wrapped("Loot " + Format.gp(p.loot) + ", " + food + ".", Theme.small(), Theme.TEXT_MUTED, TEXT));
+		Method m = Methods.byId(p.target.getMethod());
+		if (!p.counts)
+		{
+			body.add(Ui.wrapped("Ranks once you have " + Format.duration(Rates.ENOUGH_MS) + " of picking.", Theme.small(),
+				Theme.GOLD_DIM, TEXT));
+		}
+		else if (m != null)
+		{
+			long wiki = m.getWikiPerHour();
+			String vs = wiki <= 0 ? "" : ": " + Math.round(p.perHour() * 100.0 / wiki) + "% of the wiki's " + Format.gp(wiki);
+			body.add(Ui.wrapped("Ranks " + Character.toLowerCase(m.getName().charAt(0)) + m.getName().substring(1)
+				+ " in Best now" + vs + ".", Theme.small(), Theme.TEXT_FAINT, TEXT));
+		}
+		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		buttons.setOpaque(false);
+		Pickpockets.Target target = p.target;
+		buttons.add(new CodexButton("Forget log", false, 18, () -> actions.forgetPicks(target)));
+		body.add(buttons);
+		card.add(head, BorderLayout.NORTH);
+		card.add(body, BorderLayout.CENTER);
+		return card;
+	}
+
+	private static String whole(long n)
+	{
+		return String.format(Locale.ENGLISH, "%,d", n);
 	}
 
 	// ---- Goal ----
@@ -669,6 +749,7 @@ public class MoneyPanel extends PluginPanel
 			return "the wiki's rates";
 		}
 		String who = rate.getSource() == com.codex.moneypilot.core.Rate.Source.YOURS ? "your own "
+			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.PICKPOCKETS ? "your picks' "
 			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.SESSIONS ? "your sessions' " : "the wiki's ";
 		return who + Format.gp(rate.getPerHour()) + "/hr";
 	}
@@ -806,6 +887,12 @@ public class MoneyPanel extends PluginPanel
 		{
 			d.add(payLine("Yours", own.getPerHour(), own.getCount() + (own.getCount() == 1 ? " run, " : " runs, ")
 				+ Format.duration(own.getPlayedMs()), Theme.TEAL));
+		}
+		Rate picks = view.rates.pickpockets(m);
+		if (picks != null)
+		{
+			d.add(payLine("Your picks", picks.getPerHour(), String.format(Locale.ENGLISH, "%,d", picks.getCount())
+				+ " picks logged, " + Format.duration(picks.getPlayedMs()), Theme.TEAL));
 		}
 		if (sessions != null)
 		{
