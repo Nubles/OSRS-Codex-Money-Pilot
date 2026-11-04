@@ -276,6 +276,24 @@ public final class Methods
 			// The guide's requirements: Sailing 78, Fishing 91 (marlin shoals, boostable), Construction 72 and Pandemonium.
 			.need(skill(SAILING, 78), skill(FISHING, 91), skill(CONSTRUCTION, 72), quest(Quest.PANDEMONIUM))
 			.suggest(skill(SAILING, 92), skill(CONSTRUCTION, 84), note("A sloop, two cotton trawling nets and an eternal brazier")));
+		// Pickpocketing guides read 4 November 2026. Each gate is the Thieving level the game checks to
+		// pickpocket the NPC; the guides' higher levels, diaries and outfits are suggestions.
+		m.add(new Method("master-farmers", "Pickpocketing master farmers", "Pickpocketing master farmers", SKILLING,
+			865_529, "3,000 pickpockets an hour at 94 Thieving, full rogue equipment")
+			.skill(THIEVING)
+			.need(skill(THIEVING, 38))
+			.suggest(skill(THIEVING, 94), skill(AGILITY, 50), skill(FARMING, 85),
+				diary("Hard Ardougne Diary", VarbitID.ARDOUGNE_DIARY_HARD_COMPLETE)));
+		m.add(new Method("paladins", "Pickpocketing paladins", "Pickpocketing paladins", SKILLING, 551_649,
+			"99 Thieving, full rogue equipment and a Thieving cape")
+			.skill(THIEVING)
+			.need(skill(THIEVING, 70))
+			.suggest(skill(THIEVING, 99), skill(AGILITY, 50), diary("Medium Ardougne Diary", VarbitID.ARDOUGNE_DIARY_MEDIUM_COMPLETE)));
+		m.add(new Method("ardougne-knights", "Pickpocketing Ardougne knights", "Pickpocketing Ardougne knights", SKILLING,
+			265_455, "95+ Thieving, full rogue outfit")
+			.skill(THIEVING)
+			.need(skill(THIEVING, 55))
+			.suggest(skill(THIEVING, 95), skill(MAGIC, 47), diary("Medium Ardougne Diary", VarbitID.ARDOUGNE_DIARY_MEDIUM_COMPLETE)));
 		m.add(new Method("runite-ore-f2p", "Mining runite ore (free-to-play)", "Mining runite ore (free-to-play)",
 			SKILLING, 389_920, "about 40 ores an hour")
 			.f2p().skill(MINING)

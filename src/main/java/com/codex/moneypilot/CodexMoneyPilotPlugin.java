@@ -11,6 +11,9 @@ import com.codex.moneypilot.core.Logged;
 import com.codex.moneypilot.core.Method;
 import com.codex.moneypilot.core.Methods;
 import com.codex.moneypilot.core.Need;
+import com.codex.moneypilot.core.PickpocketLog;
+import com.codex.moneypilot.core.PickpocketTracker;
+import com.codex.moneypilot.core.Pickpockets;
 import com.codex.moneypilot.core.Planner;
 import com.codex.moneypilot.core.Rates;
 import com.codex.moneypilot.core.Clocked;
@@ -18,6 +21,7 @@ import com.codex.moneypilot.core.Run;
 import com.codex.moneypilot.notes.FieldNotes;
 import com.codex.moneypilot.ui.Actions;
 import com.codex.moneypilot.ui.MoneyPanel;
+import com.codex.moneypilot.ui.PickpocketPlaque;
 import com.codex.moneypilot.ui.RunPlaque;
 import com.codex.moneypilot.ui.Sigil;
 import com.codex.moneypilot.ui.Tab;
@@ -42,15 +46,20 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Item;
+import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
+import net.runelite.api.NPC;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
 import net.runelite.api.WorldType;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarPlayerID;
@@ -71,17 +80,19 @@ import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.LinkBrowser;
+import net.runelite.client.util.Text;
 
 /**
  * Codex Money Pilot: which money makers this account can do, ranked by what they pay an hour. It
  * starts from the Old School wiki's money making guide and moves to your own figures as you clock
  * runs, valuing what your bank, pack and gear gained at today's prices. It also reads the sessions
- * Codex Session Chronicle files. It reads the game and never acts in it; nothing leaves the computer.
+ * Codex Session Chronicle files, and keeps a pickpocket log whose rates rank the pickpocketing methods.
+ * It reads the game and never acts in it; nothing leaves the computer.
  */
 @PluginDescriptor(
 	name = "Codex Money Pilot",
 	description = "Money makers you can do now, ranked by what they pay you an hour: wiki figures first, then your own clocked runs",
-	tags = {"codex", "money", "gp", "profit", "money making", "planner", "gp/hr", "wiki"},
+	tags = {"codex", "money", "gp", "profit", "money making", "planner", "gp/hr", "wiki", "pickpocket", "thieving", "coin pouch"},
 	internalName = "codex-money-pilot"
 )
 public class CodexMoneyPilotPlugin extends Plugin
@@ -95,6 +106,9 @@ public class CodexMoneyPilotPlugin extends Plugin
 	private static final String BANK_KEY = "bank";
 	private static final String TAB_KEY = "tab";
 	private static final String HIDDEN_KEY = "hidden";
+	private static final String PICKS_KEY = "pickpockets";
+	/** The plaque shows while the last pick was this recent. */
+	private static final int PLAQUE_TICKS = 100;
 	/** Runs kept, newest first. */
 	static final int MAX_RUNS = 300;
 
@@ -135,6 +149,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 	private MoneyPanel panel;
 	private NavigationButton navButton;
 	private RunPlaque plaque;
+	private PickpocketPlaque pickPlaque;
 	private FieldNotes notes;
 
 	private Account account = Account.UNKNOWN;
@@ -157,6 +172,17 @@ public class CodexMoneyPilotPlugin extends Plugin
 	/** Codex Navigator's unfinished pinned goals, read and never written. */
 	private List<Pinned.Goal> pinned = Collections.emptyList();
 	private boolean navigator;
+	private PickpocketLog pickLog = new PickpocketLog();
+	private PickpocketTracker tracker = new PickpocketTracker(pickLog);
+	private Map<Integer, Long> seedBox = Collections.emptyMap();
+	private final Map<Integer, Boolean> edible = new HashMap<>();
+	private volatile View.Picking picking;
+	private boolean picksDirty;
+	/** The profile the pickpocket log was read from, so it is saved back there even after the profile changes. */
+	private String picksProfile;
+	private boolean pickRefresh;
+	/** True once the pouch warning has been said, until the pouches are opened. */
+	private boolean pouchWarned;
 	private final Set<Method.Category> shown = EnumSet.allOf(Method.Category.class);
 
 	private int accountTicks = -1;
@@ -189,6 +215,8 @@ public class CodexMoneyPilotPlugin extends Plugin
 		clientToolbar.addNavigation(navButton);
 		plaque = new RunPlaque(() -> config.plaque() ? live : null);
 		overlayManager.add(plaque);
+		pickPlaque = new PickpocketPlaque(() -> config.pickpocketPlaque() && config.pickpocketLog() ? picking : null);
+		overlayManager.add(pickPlaque);
 		clientThread.invokeLater(() ->
 		{
 			if (client.getGameState() == GameState.LOGGED_IN)
@@ -205,7 +233,9 @@ public class CodexMoneyPilotPlugin extends Plugin
 	{
 		saveRun();
 		saveBank();
+		savePicks();
 		overlayManager.remove(plaque);
+		overlayManager.remove(pickPlaque);
 		clientToolbar.removeNavigation(navButton);
 		if (notes != null)
 		{
@@ -214,6 +244,13 @@ public class CodexMoneyPilotPlugin extends Plugin
 		}
 		panel = null;
 		plaque = null;
+		pickPlaque = null;
+		picking = null;
+		pickLog = new PickpocketLog();
+		tracker = new PickpocketTracker(pickLog);
+		picksProfile = null;
+		seedBox = Collections.emptyMap();
+		edible.clear();
 		account = Account.UNKNOWN;
 		bank = null;
 		inventory = Collections.emptyMap();
@@ -248,6 +285,9 @@ public class CodexMoneyPilotPlugin extends Plugin
 		{
 			saveRun();
 			saveBank();
+			savePicks();
+			tracker.reset();
+			picking = null;
 			account = Account.UNKNOWN;
 			loaded = false;
 			refresh();
@@ -258,6 +298,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 	public void onRuneScapeProfileChanged(RuneScapeProfileChanged event)
 	{
 		saveRun();
+		savePicks();
 		load();
 		accountTicks = 2;
 	}
@@ -290,6 +331,10 @@ public class CodexMoneyPilotPlugin extends Plugin
 		{
 			saveBank();
 		}
+		if (config.pickpocketLog() && client.getGameState() == GameState.LOGGED_IN)
+		{
+			changed |= pickTick();
+		}
 		if (changed)
 		{
 			refresh();
@@ -307,17 +352,51 @@ public class CodexMoneyPilotPlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onChatMessage(ChatMessage event)
+	{
+		if (!config.pickpocketLog() || (event.getType() != ChatMessageType.SPAM && event.getType() != ChatMessageType.GAMEMESSAGE))
+		{
+			return;
+		}
+		tracker.chat(Text.removeTags(event.getMessage()), System.currentTimeMillis());
+	}
+
+	@Subscribe
+	public void onMenuOptionClicked(MenuOptionClicked event)
+	{
+		// Only read, to know which NPC a pick is of; the click itself is left alone.
+		if (config.pickpocketLog() && "Pickpocket".equals(event.getMenuOption()))
+		{
+			NPC npc = event.getMenuEntry().getNpc();
+			tracker.aim(npc == null ? null : Text.removeTags(npc.getName()));
+		}
+	}
+
+	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
 		int id = event.getContainerId();
-		if (id != InventoryID.INV && id != InventoryID.WORN && id != InventoryID.BANK)
+		if (id != InventoryID.INV && id != InventoryID.WORN && id != InventoryID.BANK && id != InventoryID.SEED_BOX)
 		{
 			return;
 		}
 		Map<Integer, Long> items = read(event.getItemContainer());
-		if (id == InventoryID.INV)
+		if (id == InventoryID.INV || id == InventoryID.SEED_BOX)
 		{
-			inventory = items;
+			if (id == InventoryID.INV)
+			{
+				inventory = items;
+			}
+			else
+			{
+				seedBox = items;
+			}
+			if (config.pickpocketLog())
+			{
+				Map<Integer, Long> pack = new HashMap<>(inventory);
+				seedBox.forEach((k, v) -> pack.merge(k, v, Long::sum));
+				tracker.pack(pack, banking());
+			}
 		}
 		else if (id == InventoryID.WORN)
 		{
@@ -378,7 +457,18 @@ public class CodexMoneyPilotPlugin extends Plugin
 			}
 			return;
 		}
-		if ("wilderness".equals(event.getKey()) || "goalCoins".equals(event.getKey()) || "goalName".equals(event.getKey())
+		if ("pickpocketLog".equals(event.getKey()) && !config.pickpocketLog())
+		{
+			clientThread.invokeLater(() ->
+			{
+				savePicks();
+				tracker.reset();
+				picking = null;
+				refresh();
+			});
+			return;
+		}
+		if ("wilderness".equals(event.getKey()) || "pickpocketLog".equals(event.getKey()) || "pouchWarning".equals(event.getKey()) || "goalCoins".equals(event.getKey()) || "goalName".equals(event.getKey())
 			|| "hoursPerDay".equals(event.getKey()) || "readGearRoadmap".equals(event.getKey()) || "runCoach".equals(event.getKey()))
 		{
 			clientThread.invokeLater(() ->
@@ -466,6 +556,125 @@ public class CodexMoneyPilotPlugin extends Plugin
 		String board = configManager.getRSProfileConfiguration(Pinned.NAVIGATOR_GROUP, Pinned.NAVIGATOR_BOARD);
 		navigator = board != null;
 		pinned = Pinned.navigator(gson, board);
+	}
+
+	// ---- Pickpocketing ----
+
+	/** A tick of the pickpocket log; true when the panel should be rebuilt. */
+	private boolean pickTick()
+	{
+		long now = System.currentTimeMillis();
+		tracker.tick(this::isEdible, now);
+		boolean filed = tracker.takeChanged();
+		if (filed)
+		{
+			picksDirty = true;
+		}
+		Pickpockets.Target target = tracker.getSitting();
+		long since = tracker.sinceLastPick();
+		if (target == null || since < 0 || since > PLAQUE_TICKS)
+		{
+			picking = null;
+		}
+		else
+		{
+			PickpocketLog.Counts live = tracker.getLive();
+			int cap = target.hasPouch() ? Pickpockets.pouchCap(diary(VarbitID.ARDOUGNE_DIARY_MEDIUM_COMPLETE),
+				diary(VarbitID.ARDOUGNE_DIARY_HARD_COMPLETE), diary(VarbitID.ARDOUGNE_DIARY_ELITE_COMPLETE)) : 0;
+			int warnAt = Math.max(0, config.pouchWarning());
+			long pouches = tracker.pouches();
+			picking = new View.Picking(target, live.getAttempts(), live.getSuccesses(), live.getStuns(), live.getPlayedMs(),
+				live.profit(this::price), pouches, cap, warnAt);
+			if (picking.nearCap())
+			{
+				if (!pouchWarned)
+				{
+					pouchWarned = true;
+					say(pouches >= cap ? "your coin pouches are full (" + pouches + " of " + cap + "): open them to pick on."
+						: pouches + " of " + cap + " coin pouches: open them soon.");
+				}
+			}
+			else
+			{
+				pouchWarned = false;
+			}
+		}
+		if (picksDirty && tickCount % SAVE_TICKS == 0)
+		{
+			savePicks();
+		}
+		// The ranking follows the log, but not every tick.
+		pickRefresh |= filed;
+		if (pickRefresh && tickCount % LIVE_TICKS == 0)
+		{
+			pickRefresh = false;
+			return true;
+		}
+		return false;
+	}
+
+	private boolean diary(int varbit)
+	{
+		return client.getVarbitValue(varbit) == 1;
+	}
+
+	private boolean isEdible(int id)
+	{
+		return edible.computeIfAbsent(id, k ->
+		{
+			ItemComposition c = itemManager.getItemComposition(k);
+			if (c == null || c.getInventoryActions() == null)
+			{
+				return false;
+			}
+			for (String action : c.getInventoryActions())
+			{
+				if ("Eat".equals(action) || "Drink".equals(action))
+				{
+					return true;
+				}
+			}
+			return false;
+		});
+	}
+
+	/** True while the bank or a deposit box is open, when what leaves the pack is banked, not eaten. */
+	private boolean banking()
+	{
+		return visible(InterfaceID.Bankmain.UNIVERSE) || visible(InterfaceID.BankDepositbox.UNIVERSE);
+	}
+
+	private boolean visible(int component)
+	{
+		net.runelite.api.widgets.Widget w = client.getWidget(component);
+		return w != null && !w.isHidden();
+	}
+
+	private long price(int id)
+	{
+		return itemManager.getItemPrice(id);
+	}
+
+	private void forgetPicks(Pickpockets.Target target)
+	{
+		pickLog.forget(target);
+		picksDirty = true;
+		savePicks();
+		refresh();
+	}
+
+	/** The pickpocket log as the panel shows it: each target valued at today's prices, best paying first. */
+	private List<View.Picked> picked(long now)
+	{
+		List<View.Picked> out = new ArrayList<>();
+		for (PickpocketLog.Tally t : pickLog.tallies(now).values())
+		{
+			out.add(new View.Picked(t.getTarget(), t.getAttempts(), t.getSuccesses(), t.getStuns(), t.getOpened(), t.getPlayedMs(),
+				t.lootValue(this::price), t.foodValue(this::price), t.foodPerHour(), t.picksPerHour(),
+				t.getPlayedMs() >= Rates.ENOUGH_MS));
+		}
+		out.sort((a, b) -> Long.compare(b.perHour(), a.perHour()));
+		return out;
 	}
 
 	// ---- Runs ----
@@ -637,6 +846,12 @@ public class CodexMoneyPilotPlugin extends Plugin
 		}
 		readJournal();
 		readGoals();
+		picksProfile = configManager.getRSProfileKey();
+		pickLog = PickpocketLog.decode(gson, configManager.getRSProfileConfiguration(CodexMoneyPilotConfig.GROUP, PICKS_KEY));
+		pickLog.prune(System.currentTimeMillis());
+		tracker = new PickpocketTracker(pickLog);
+		picking = null;
+		picksDirty = false;
 	}
 
 	private void saveRuns()
@@ -652,6 +867,23 @@ public class CodexMoneyPilotPlugin extends Plugin
 		if (run != null && configManager.getRSProfileKey() != null)
 		{
 			configManager.setRSProfileConfiguration(CodexMoneyPilotConfig.GROUP, RUN_KEY, gson.toJson(run));
+		}
+	}
+
+	private void savePicks()
+	{
+		if (picksDirty && picksProfile != null)
+		{
+			pickLog.prune(System.currentTimeMillis());
+			if (pickLog.isEmpty())
+			{
+				configManager.unsetConfiguration(CodexMoneyPilotConfig.GROUP, picksProfile, PICKS_KEY);
+			}
+			else
+			{
+				configManager.setConfiguration(CodexMoneyPilotConfig.GROUP, picksProfile, PICKS_KEY, pickLog.encode(gson));
+			}
+			picksDirty = false;
 		}
 	}
 
@@ -722,11 +954,11 @@ public class CodexMoneyPilotPlugin extends Plugin
 		}
 		long now = System.currentTimeMillis();
 		boolean loggedIn = client.getGameState() == GameState.LOGGED_IN && account.isKnown();
-		Rates rates = Rates.of(runs, journal, now);
+		Rates rates = Rates.of(runs, journal, config.pickpocketLog() ? pickLog.rates(now, this::price) : null, now);
 		Planner plan = loggedIn ? Planner.plan(Methods.all(), account, rates, new Planner.Filter(shown, config.wilderness())) : null;
 		View.Goals goals = plan == null ? View.Goals.NONE : goals(plan, rates);
 		View view = new View(loggedIn, account, plan, rates, new ArrayList<>(runs), journal, shown, live, bank != null, chronicle, now,
-			goals);
+			goals, config.pickpocketLog() ? picked(now) : null, config.pickpocketLog());
 		if (plan != null && notes != null && notes.isOpen())
 		{
 			JsonObject n = new JsonObject();
@@ -849,6 +1081,12 @@ public class CodexMoneyPilotPlugin extends Plugin
 		public void guide(Method method)
 		{
 			LinkBrowser.browse(method.getUrl());
+		}
+
+		@Override
+		public void forgetPicks(Pickpockets.Target target)
+		{
+			clientThread.invokeLater(() -> CodexMoneyPilotPlugin.this.forgetPicks(target));
 		}
 
 		@Override

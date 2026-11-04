@@ -9,7 +9,7 @@ import java.util.Set;
 
 /**
  * Each method's best known profit an hour: your own clocked runs when they add up to enough play,
- * else Session Chronicle's sessions spent on it, else the wiki's guide. Only the last
+ * else the pickpocket log for a pickpocketing method, else Session Chronicle's sessions spent on it, else the wiki's guide. Only the last
  * {@link #DAYS} days count, so the figure follows prices and your gear as they change.
  */
 public final class Rates
@@ -20,6 +20,7 @@ public final class Rates
 
 	private final Map<String, Rate> own = new HashMap<>();
 	private final Map<String, Rate> sessions = new HashMap<>();
+	private final Map<String, Rate> picks = new HashMap<>();
 
 	private Rates()
 	{
@@ -27,7 +28,26 @@ public final class Rates
 
 	public static Rates of(Collection<Clocked> runs, Collection<Logged> journal, long now)
 	{
+		return of(runs, journal, null, now);
+	}
+
+	/**
+	 * As above, with the pickpocket log's rates by method id ({@link PickpocketLog#rates}): they rank below
+	 * runs you clocked yourself and above Session Chronicle's sessions.
+	 */
+	public static Rates of(Collection<Clocked> runs, Collection<Logged> journal, Map<String, Rate> pickpockets, long now)
+	{
 		Rates r = new Rates();
+		if (pickpockets != null)
+		{
+			pickpockets.forEach((id, rate) ->
+			{
+				if (id != null && rate != null && Methods.byId(id) != null && rate.getPlayedMs() >= ENOUGH_MS)
+				{
+					r.picks.put(id, rate);
+				}
+			});
+		}
 		long from = now - DAYS * 86_400_000L;
 
 		Map<String, long[]> byMethod = new HashMap<>();
@@ -89,6 +109,10 @@ public final class Rates
 		Rate r = own.get(m.getId());
 		if (r == null)
 		{
+			r = picks.get(m.getId());
+		}
+		if (r == null)
+		{
 			r = sessions.get(m.getId());
 		}
 		return r != null ? r : wiki(m);
@@ -111,9 +135,15 @@ public final class Rates
 		return sessions.get(m.getId());
 	}
 
+	/** The pickpocket log's rate for a method, or null. */
+	public Rate pickpockets(Method m)
+	{
+		return picks.get(m.getId());
+	}
+
 	public boolean hasAny()
 	{
-		return !own.isEmpty() || !sessions.isEmpty();
+		return !own.isEmpty() || !picks.isEmpty() || !sessions.isEmpty();
 	}
 
 	/** Records of one method, newest first. */

@@ -45,6 +45,20 @@ the list follows how you actually play.
   the last lump landed and keeps its verdict until the rate is clearly past the line, so it does not
   flicker between kills.
 
+- **Pickpocket log**: pickpocket Ardougne knights, paladins, Master Farmers, vyres or elves and Money
+  Pilot keeps your own log of each, for each account: picks tried, picks that worked, stuns (from the
+  game's own messages), coin pouches opened, the loot and the food and drink you used, valued at
+  today's Grand Exchange prices. Your rates tab shows your own success rate and profit an hour at each
+  target, and once you have a quarter of an hour of picking at one, your rate ranks that method in
+  Best now (below runs you clocked, above Session Chronicle's sessions). Nothing works out a success
+  chance from a formula: it counts what happened to you.
+- **Pickpocket plaque**: while you pick, a small plaque on the game screen shows the rate an hour of
+  this sitting, your success rate and stuns, and the coin pouches you hold against how many you can
+  hold (28, or 56, 84 and 140 after the medium, hard and elite Ardougne Diary). It turns ember a few
+  pouches before the cap and says so once in chat, so you open them before a pick is wasted.
+
+![Pickpocket log](docs/pickpocket-log.png) ![Pickpocket plaque](docs/pickpocket-plaque.png)
+
 ![A method opened](docs/best-open.png) ![Within reach](docs/reach.png) ![Your rates](docs/yours.png)
 
 ![Goal](docs/goal.png) ![Run coach](docs/coach.png)
@@ -82,6 +96,10 @@ plans for the coins goal in the settings, or says how to set one.
 - Open your bank once so Money Pilot knows what you start a run with.
 - Bank your loot before you stop a run. Items in a looting bag, rune pouch or Grand Exchange offer
   are not counted until they reach your bank, pack or gear.
+- The pickpocket log knows which NPC you picked from the coin pouch it gives (each kind gives its own),
+  so picks of an elf or vyre before its first pouch wait until then, and picks of NPCs it does not log
+  (men, H.A.M. members) are left out. Pouches count when you open them. Seeds that go straight into
+  a seed box count only if the game shows the box changing.
 - Money Pilot reads the game and never acts in it. It shows numbers and wiki links, never what to
   click. Nothing leaves your computer.
 
@@ -100,6 +118,7 @@ prices, which is why your own clocked rate replaces them.
 | Crafting wrath runes | Runecraft 95, Dragon Slayer II |
 | Smelting runite / adamantite bars at Blast Furnace | Smithing 85 / 70, started The Giant Dwarf |
 | Pickpocketing vyres / elves | Thieving 82 + Sins of the Father / Thieving 85 + Song of the Elves |
+| Pickpocketing Ardougne knights / paladins / master farmers | Thieving 55 / 70 / 38 (read 4 November 2026) |
 | Rogues' Castle chests | Thieving 84, Prayer 43, Medium Wilderness Diary |
 | Casting Tan Leather | Magic 78, Lunar Diplomacy, Hard Fremennik Diary |
 | Killing Kree'arra | Ranged 70 (Armadyl's Eyrie, unboostable), Troll Stronghold |
@@ -116,6 +135,8 @@ The full list, with each page's wording, is in `MethodsTest.gatesMatchTheWiki` a
 - **Run plaque** (on): the clocked run on the game screen
 - **Chat line when a run ends** (on)
 - **Run coach** (on): the coach's line on the plaque and the panel while a run is clocked
+- **Pickpocketing**: *Log pickpocketing* (on), *Pickpocket plaque* (on) and *Pouch warning* (3
+  pouches before the cap; 0 for none)
 - **Goal**: *Coins goal (thousands)* (0, none), *Coins goal name*, *Hours played a day* (2), and
   *Plan Gear Roadmap's goal* (on)
 - **Keep field notes** (off): a local record of what the plugin reads and decides, for checking its
