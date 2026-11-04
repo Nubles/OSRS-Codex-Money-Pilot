@@ -4,6 +4,7 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
 
 @ConfigGroup(CodexMoneyPilotConfig.GROUP)
 public interface CodexMoneyPilotConfig extends Config
@@ -39,6 +40,73 @@ public interface CodexMoneyPilotConfig extends Config
 		position = 2
 	)
 	default boolean chatLine()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "runCoach",
+		name = "Run coach",
+		description = "While a run is clocked, weigh its rate against your best run of the method and the wiki's figure",
+		position = 3
+	)
+	default boolean runCoach()
+	{
+		return true;
+	}
+
+	@ConfigSection(
+		name = "Goal",
+		description = "What the Goal tab plans for",
+		position = 10
+	)
+	String GOAL = "goalSection";
+
+	@ConfigItem(
+		keyName = "goalCoins",
+		name = "Coins goal (thousands)",
+		description = "Coins to save for, in thousands: 4200 is 4.2M. Planned beside Codex Gear Roadmap's savings goal. 0 for none",
+		section = GOAL,
+		position = 0
+	)
+	default int goalCoins()
+	{
+		return 0;
+	}
+
+	@ConfigItem(
+		keyName = "goalName",
+		name = "Coins goal name",
+		description = "What the coins goal is for, shown on the Goal tab",
+		section = GOAL,
+		position = 1
+	)
+	default String goalName()
+	{
+		return "";
+	}
+
+	@Range(min = 1, max = 16)
+	@ConfigItem(
+		keyName = "hoursPerDay",
+		name = "Hours played a day",
+		description = "How long you play on a day, for the finish date and how many timegated runs fit in",
+		section = GOAL,
+		position = 2
+	)
+	default int hoursPerDay()
+	{
+		return 2;
+	}
+
+	@ConfigItem(
+		keyName = "readGearRoadmap",
+		name = "Plan Gear Roadmap's goal",
+		description = "Plan for the savings goal picked in Codex Gear Roadmap, when it is installed",
+		section = GOAL,
+		position = 3
+	)
+	default boolean readGearRoadmap()
 	{
 		return true;
 	}

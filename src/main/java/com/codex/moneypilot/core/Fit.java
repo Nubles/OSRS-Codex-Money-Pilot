@@ -30,6 +30,7 @@ public final class Fit
 	private final List<Need> unsure;
 	private final List<Need> short_;
 	private final int gap;
+	private int levelsShort;
 
 	private Fit(Method method, Status status, List<Need> unmet, List<Need> unsure, List<Need> shortOf, int gap)
 	{
@@ -101,7 +102,9 @@ public final class Fit
 		{
 			status = shortOf.isEmpty() ? Status.READY : Status.ABLE;
 		}
-		return new Fit(m, status, unmet, unsure, shortOf, gap);
+		Fit fit = new Fit(m, status, unmet, unsure, shortOf, gap);
+		fit.levelsShort = levelsShort;
+		return fit;
 	}
 
 	public Method getMethod()
@@ -130,6 +133,12 @@ public final class Fit
 	public List<Need> getUnsure()
 	{
 		return unsure;
+	}
+
+	/** Levels short of the guide's suggestions, all told, whatever the status. */
+	public int getLevelsShort()
+	{
+		return levelsShort;
 	}
 
 	/** Suggestions not met. */

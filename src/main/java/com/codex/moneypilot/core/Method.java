@@ -47,6 +47,12 @@ public final class Method
 	private final List<Need> needs = new ArrayList<>();
 	private final List<Need> suggests = new ArrayList<>();
 	private final List<String> matches = new ArrayList<>();
+	/** For a timegated run (bird houses, a herb run): what one run pays, how long it takes and how often it comes round. */
+	private long perRun;
+	private long runMs;
+	private long everyMs;
+	/** Runs that share what they use, such as the herb patches: only the best paying of a group is done. */
+	private String group;
 
 	Method(String id, String name, String page, Category category, long wikiPerHour, String basis)
 	{
@@ -85,6 +91,19 @@ public final class Method
 	Method suggest(Need... add)
 	{
 		Collections.addAll(suggests, add);
+		return this;
+	}
+
+	/**
+	 * Makes this a timegated run, done alongside other play: what one run pays by the guide, how long
+	 * it takes, and the guide's minimum recurrence time.
+	 */
+	Method recurring(long pays, long seconds, long minutes, String sharedBy)
+	{
+		perRun = pays;
+		runMs = seconds * 1000L;
+		everyMs = minutes * 60_000L;
+		group = sharedBy;
 		return this;
 	}
 
@@ -169,6 +188,36 @@ public final class Method
 	public List<Need> getSuggests()
 	{
 		return Collections.unmodifiableList(suggests);
+	}
+
+	/** True for a timegated run done alongside other play, which is planned rather than ranked. */
+	public boolean isRecurring()
+	{
+		return everyMs > 0;
+	}
+
+	/** What one run pays by the guide; 0 for a method that is not timegated. */
+	public long getPerRun()
+	{
+		return perRun;
+	}
+
+	/** How long one run takes, by the guide. */
+	public long getRunMs()
+	{
+		return runMs;
+	}
+
+	/** How often the run comes round, by the guide (its minimum recurrence time). */
+	public long getEveryMs()
+	{
+		return everyMs;
+	}
+
+	/** Runs of the same group use the same patches, so only one of them is done; null when it stands alone. */
+	public String getGroup()
+	{
+		return group;
 	}
 
 	/** True when Session Chronicle's activity name is this method's. */

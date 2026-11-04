@@ -1,6 +1,10 @@
 package com.codex.moneypilot;
 
 import com.codex.moneypilot.core.Account;
+import com.codex.moneypilot.core.Coach;
+import com.codex.moneypilot.core.GoalPlan;
+import com.codex.moneypilot.core.Pinned;
+import com.codex.moneypilot.core.Target;
 import com.codex.moneypilot.core.Format;
 import com.codex.moneypilot.core.Holdings;
 import com.codex.moneypilot.core.Logged;
@@ -48,6 +52,7 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
@@ -140,10 +145,18 @@ public class CodexMoneyPilotPlugin extends Plugin
 	private Run run;
 	private Holdings runStart;
 	private long runProfit;
+	/** Time played on the run when its profit last changed, and the coach's last verdict, so it does not flicker. */
+	private long runChangedAt;
+	private Coach.Verdict coached;
 	private volatile View.Live live;
 	private List<Clocked> runs = new ArrayList<>();
 	private List<Logged> journal = Collections.emptyList();
 	private boolean chronicle;
+	/** Codex Gear Roadmap's savings goal, read and never written; null when there is none. */
+	private Pinned.Gear gearGoal;
+	/** Codex Navigator's unfinished pinned goals, read and never written. */
+	private List<Pinned.Goal> pinned = Collections.emptyList();
+	private boolean navigator;
 	private final Set<Method.Category> shown = EnumSet.allOf(Method.Category.class);
 
 	private int accountTicks = -1;
@@ -210,6 +223,9 @@ public class CodexMoneyPilotPlugin extends Plugin
 		live = null;
 		runs = new ArrayList<>();
 		journal = Collections.emptyList();
+		gearGoal = null;
+		pinned = Collections.emptyList();
+		navigator = false;
 		loaded = false;
 		accountTicks = -1;
 	}
@@ -331,6 +347,21 @@ public class CodexMoneyPilotPlugin extends Plugin
 			});
 			return;
 		}
+		if ((Pinned.GEAR_GROUP.equals(event.getGroup()) && Pinned.GEAR_GOAL.equals(event.getKey()))
+			|| (Pinned.NAVIGATOR_GROUP.equals(event.getGroup()) && Pinned.NAVIGATOR_BOARD.equals(event.getKey())))
+		{
+			// Another plugin saved its goal for some profile; only this account's matters.
+			String profile = configManager.getRSProfileKey();
+			if (profile != null && profile.equals(event.getProfile()))
+			{
+				clientThread.invokeLater(() ->
+				{
+					readGoals();
+					refresh();
+				});
+			}
+			return;
+		}
 		if (!CodexMoneyPilotConfig.GROUP.equals(event.getGroup()))
 		{
 			return;
@@ -347,9 +378,14 @@ public class CodexMoneyPilotPlugin extends Plugin
 			}
 			return;
 		}
-		if ("wilderness".equals(event.getKey()))
+		if ("wilderness".equals(event.getKey()) || "goalCoins".equals(event.getKey()) || "goalName".equals(event.getKey())
+			|| "hoursPerDay".equals(event.getKey()) || "readGearRoadmap".equals(event.getKey()) || "runCoach".equals(event.getKey()))
 		{
-			clientThread.invokeLater(this::refresh);
+			clientThread.invokeLater(() ->
+			{
+				measure();
+				refresh();
+			});
 		}
 	}
 
@@ -387,7 +423,9 @@ public class CodexMoneyPilotPlugin extends Plugin
 		}
 		Map<Quest, QuestState> quests = new EnumMap<>(Quest.class);
 		Map<Integer, Integer> varbits = new HashMap<>();
-		for (Method m : Methods.all())
+		List<Method> every = new ArrayList<>(Methods.all());
+		every.addAll(Methods.recurring());
+		for (Method m : every)
 		{
 			readNeeds(m.getNeeds(), quests, varbits);
 			readNeeds(m.getSuggests(), quests, varbits);
@@ -420,6 +458,16 @@ public class CodexMoneyPilotPlugin extends Plugin
 		journal = Logged.read(gson, json, System.currentTimeMillis());
 	}
 
+	/** Gear Roadmap's savings goal and Navigator's pinned goals for this account; either may be absent. */
+	private void readGoals()
+	{
+		// Other plugins' formats may change under us; whatever cannot be read is simply not planned for.
+		gearGoal = Pinned.gear(gson, configManager.getRSProfileConfiguration(Pinned.GEAR_GROUP, Pinned.GEAR_GOAL));
+		String board = configManager.getRSProfileConfiguration(Pinned.NAVIGATOR_GROUP, Pinned.NAVIGATOR_BOARD);
+		navigator = board != null;
+		pinned = Pinned.navigator(gson, board);
+	}
+
 	// ---- Runs ----
 
 	private Holdings holdings()
@@ -433,9 +481,18 @@ public class CodexMoneyPilotPlugin extends Plugin
 		{
 			return;
 		}
-		runProfit = holdings().gainedSince(runStart, id -> itemManager.getItemPrice(id));
+		long profit = holdings().gainedSince(runStart, id -> itemManager.getItemPrice(id));
+		if (profit != runProfit)
+		{
+			runChangedAt = run.getPlayedMs();
+		}
+		runProfit = profit;
 		Method m = Methods.byId(run.getMethod());
-		live = m == null ? null : new View.Live(m, run.getPlayedMs(), runProfit, client.getGameState() == GameState.LOGGED_IN);
+		Coach coach = m == null || !config.runCoach() ? null
+			: Coach.of(m, run.getPlayedMs(), runProfit, runChangedAt, runs,
+				Rates.of(runs, Collections.emptyList(), System.currentTimeMillis()).own(m), coached);
+		coached = coach == null ? null : coach.getVerdict();
+		live = m == null ? null : new View.Live(m, run.getPlayedMs(), runProfit, client.getGameState() == GameState.LOGGED_IN, coach);
 	}
 
 	private void start(Method m)
@@ -447,6 +504,8 @@ public class CodexMoneyPilotPlugin extends Plugin
 		run = new Run(m.getId(), System.currentTimeMillis(), holdings());
 		runStart = run.getStart();
 		runProfit = 0;
+		runChangedAt = 0;
+		coached = null;
 		measure();
 		saveRun();
 		if (notes != null && notes.isOpen())
@@ -577,6 +636,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 			}
 		}
 		readJournal();
+		readGoals();
 	}
 
 	private void saveRuns()
@@ -664,7 +724,9 @@ public class CodexMoneyPilotPlugin extends Plugin
 		boolean loggedIn = client.getGameState() == GameState.LOGGED_IN && account.isKnown();
 		Rates rates = Rates.of(runs, journal, now);
 		Planner plan = loggedIn ? Planner.plan(Methods.all(), account, rates, new Planner.Filter(shown, config.wilderness())) : null;
-		View view = new View(loggedIn, account, plan, rates, new ArrayList<>(runs), journal, shown, live, bank != null, chronicle, now);
+		View.Goals goals = plan == null ? View.Goals.NONE : goals(plan, rates);
+		View view = new View(loggedIn, account, plan, rates, new ArrayList<>(runs), journal, shown, live, bank != null, chronicle, now,
+			goals);
 		if (plan != null && notes != null && notes.isOpen())
 		{
 			JsonObject n = new JsonObject();
@@ -681,6 +743,62 @@ public class CodexMoneyPilotPlugin extends Plugin
 			notes.noteChanged("plan", n);
 		}
 		SwingUtilities.invokeLater(() -> target.update(view));
+	}
+
+	/** The goals to plan for, each with its plan; on the client thread, where prices are read. */
+	private View.Goals goals(Planner plan, Rates rates)
+	{
+		List<Target> targets = new ArrayList<>();
+		long coins = coins(bank) + coins(inventory);
+		boolean coinsKnown = bank != null;
+		// Ironmen cannot buy the pieces, so a price on them would mean nothing.
+		if (gearGoal != null && config.readGearRoadmap() && !account.isIronman())
+		{
+			Map<Integer, Long> held = new HashMap<>(holdings().getItems());
+			long price = 0;
+			boolean priced = true;
+			for (int id : gearGoal.getIds())
+			{
+				int canon = itemManager.canonicalize(id);
+				if (held.containsKey(canon) || held.containsKey(id))
+				{
+					continue;
+				}
+				long each = itemManager.getItemPrice(canon);
+				if (each <= 0)
+				{
+					// A piece with no price would make the goal look cheaper than it is.
+					priced = false;
+					break;
+				}
+				price += each;
+			}
+			if (priced)
+			{
+				targets.add(new Target(gearGoal.getName(), Target.Source.GEAR_ROADMAP, price, coins, coinsKnown));
+			}
+		}
+		if (config.goalCoins() > 0)
+		{
+			targets.add(new Target(config.goalName(), Target.Source.TYPED, config.goalCoins() * 1_000L, coins, coinsKnown));
+		}
+		List<Method> timegated = GoalPlan.runsFor(account, Methods.recurring());
+		int hours = Math.max(1, Math.min(16, config.hoursPerDay()));
+		List<View.Goal> out = new ArrayList<>();
+		for (Target t : targets)
+		{
+			out.add(new View.Goal(t, GoalPlan.of(t.getShort(), plan.getOpen(), timegated, plan.getNear(), pinned, hours)));
+		}
+		return new View.Goals(out, navigator, pinned.size(), hours);
+	}
+
+	private static long coins(Map<Integer, Long> items)
+	{
+		if (items == null)
+		{
+			return 0;
+		}
+		return items.getOrDefault(ItemID.COINS, 0L) + 1_000L * items.getOrDefault(ItemID.PLATINUM, 0L);
 	}
 
 	private final class PanelActions implements Actions

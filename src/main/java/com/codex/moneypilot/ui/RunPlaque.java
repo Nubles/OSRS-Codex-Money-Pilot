@@ -1,5 +1,6 @@
 package com.codex.moneypilot.ui;
 
+import com.codex.moneypilot.core.Coach;
 import com.codex.moneypilot.core.Format;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -19,6 +20,8 @@ public class RunPlaque extends Overlay
 {
 	private static final int WIDTH = 150;
 	private static final int HEIGHT = 50;
+	/** Taller by a line when the run coach has something to say. */
+	private static final int COACHED = 62;
 
 	private final Supplier<View.Live> live;
 
@@ -38,7 +41,12 @@ public class RunPlaque extends Overlay
 			return null;
 		}
 		paint(g, run);
-		return new Dimension(WIDTH, HEIGHT);
+		return new Dimension(WIDTH, height(run));
+	}
+
+	static int height(View.Live run)
+	{
+		return run.coach != null ? COACHED : HEIGHT;
 	}
 
 	/** Draws the plaque at the origin; the screenshot harness calls this too. */
@@ -46,13 +54,14 @@ public class RunPlaque extends Overlay
 	{
 		Graphics2D p = (Graphics2D) g.create();
 		Theme.smooth(p);
-		RoundRectangle2D shape = new RoundRectangle2D.Float(0.5f, 0.5f, WIDTH - 1, HEIGHT - 1, 8, 8);
-		p.setPaint(new GradientPaint(0, 0, Theme.alpha(Theme.CARD_TOP, 235), 0, HEIGHT, Theme.alpha(Theme.INK_DEEP, 235)));
+		int height = height(run);
+		RoundRectangle2D shape = new RoundRectangle2D.Float(0.5f, 0.5f, WIDTH - 1, height - 1, 8, 8);
+		p.setPaint(new GradientPaint(0, 0, Theme.alpha(Theme.CARD_TOP, 235), 0, height, Theme.alpha(Theme.INK_DEEP, 235)));
 		p.fill(shape);
 		p.setColor(Theme.alpha(Theme.GOLD, 150));
 		p.draw(shape);
-		p.setPaint(new GradientPaint(0, 0, Theme.TEAL, 0, HEIGHT, Theme.alpha(Theme.TEAL, 80)));
-		p.fillRect(1, 5, 2, HEIGHT - 10);
+		p.setPaint(new GradientPaint(0, 0, Theme.TEAL, 0, height, Theme.alpha(Theme.TEAL, 80)));
+		p.fillRect(1, 5, 2, height - 10);
 
 		p.setFont(Theme.small());
 		FontMetrics small = p.getFontMetrics();
@@ -66,6 +75,14 @@ public class RunPlaque extends Overlay
 		p.setFont(Theme.small());
 		String rate = run.perHour() == 0 ? "rate after a minute" : Format.signed(run.perHour()) + " an hour";
 		Ui.shadowed(p, rate, 9, 45, Theme.TEXT_MUTED);
+		if (run.coach != null)
+		{
+			Coach c = run.coach;
+			Color tone = c.getVerdict() == Coach.Verdict.BEST || c.getVerdict() == Coach.Verdict.AHEAD ? Theme.GREEN
+				: c.getVerdict() == Coach.Verdict.BEHIND ? Theme.EMBER : c.getVerdict() == Coach.Verdict.SETTLING ? Theme.TEXT_FAINT
+				: Theme.TEXT;
+			Ui.shadowed(p, Ui.clip(c.shortLine(), small, WIDTH - 16), 9, 57, tone);
+		}
 		p.dispose();
 	}
 }
