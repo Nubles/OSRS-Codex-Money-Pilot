@@ -30,7 +30,41 @@ the list follows how you actually play.
 - Free-to-play accounts only see free-to-play methods, and ironmen do not see methods that buy their
   supplies. Wilderness methods are marked and can be hidden.
 
+- **Goal**: how fast can you afford it? Money Pilot reads the savings goal you picked in **Codex Gear
+  Roadmap** (priced at today's Grand Exchange prices, less the pieces you own) or a coins goal you type
+  in its settings, takes off the coins in your bank and pack, and plans the rest: the best paying
+  method you can do, at your own clocked rate where you have one, with your timegated runs fitted in
+  alongside, and a finish date at the hours a day you play ("4.2m short: about 2h 40m of brutal black
+  dragons at the wiki's 1.53m/hr, with 2 herb runs, 3 bird house runs and 2 Miscellania collections
+  alongside. 2 days at 2h a day"). Below it: the next best methods, your timegated runs alone, and any
+  goal pinned in **Codex Navigator** that would open a better paying method ("Slayer 95 opens the
+  Alchemical Hydra: then 1h 11m instead of 2h 40m").
+- **Run coach**: while a run is clocked, the plaque and the panel weigh its rate against your best
+  run of that method, your usual rate and the wiki's ("Best yet, was 1.15m", "-23% on your 1.12m",
+  "87% of wiki 2.63m"). Loot reaches your bank in lumps, so the coach weighs the rate as it stood when
+  the last lump landed and keeps its verdict until the rate is clearly past the line, so it does not
+  flicker between kills.
+
 ![A method opened](docs/best-open.png) ![Within reach](docs/reach.png) ![Your rates](docs/yours.png)
+
+![Goal](docs/goal.png) ![Run coach](docs/coach.png)
+
+### How the goal is planned
+
+Each day you play for the hours set in the settings (2 by default). Miscellania is collected once a
+day. Bird houses and herb runs are done each time they come round while you play, and once at each
+login after the first day, for what grew while you were away. The minutes a run takes come out of the
+main method, and a run is only fitted in when it pays more for its minutes than the main method
+would; a method you can do at 3m an hour pays more than a bird house run's minutes, and the plan says
+so by leaving it out. The runs, from the wiki's guides (read 4 November 2026):
+
+| Run | Needs | Per run (after tax) | Takes | Every |
+| --- | --- | --- | --- | --- |
+| Bird houses (4 redwood) | Hunter 89, Bone Voyage | 52,254 | 1.4 minutes | 50 minutes |
+| Herb runs (ranarr / snapdragon / torstol, the best paying one) | Farming 32 / 62 / 85, Ghosts Ahoy, My Arm's Big Adventure, Fairytale I - Growing Pains | 178,960 / 175,174 / 146,724 | 6 minutes | 90 minutes |
+| Managing Miscellania | Throne of Miscellania | 21,976 | 30 seconds | a day |
+
+Only methods with a wiki guide are planned; nothing is guessed for methods the guide does not cover.
 
 ## Works with the Codex suite
 
@@ -38,6 +72,10 @@ If **Codex Session Chronicle** is installed, the sessions it files count too: a 
 on Vorkath gives Money Pilot your Vorkath rate. It uses the net worth Codex Ledger saw the session
 gain when Ledger is running, or Chronicle's loot less supplies otherwise. Money Pilot only reads
 Chronicle's journal and never changes it.
+
+It also reads, and never changes, **Codex Gear Roadmap**'s savings goal (`codexgearroadmap.goal`) and
+**Codex Navigator**'s goal board (`codexnavigator.goalBoard`). Either can be missing; the Goal tab then
+plans for the coins goal in the settings, or says how to set one.
 
 ## Good to know
 
@@ -77,6 +115,9 @@ The full list, with each page's wording, is in `MethodsTest.gatesMatchTheWiki` a
 - **Show Wilderness methods** (on)
 - **Run plaque** (on): the clocked run on the game screen
 - **Chat line when a run ends** (on)
+- **Run coach** (on): the coach's line on the plaque and the panel while a run is clocked
+- **Goal**: *Coins goal (thousands)* (0, none), *Coins goal name*, *Hours played a day* (2), and
+  *Plan Gear Roadmap's goal* (on)
 - **Keep field notes** (off): a local record of what the plugin reads and decides, for checking its
   guesses, written to `.runelite/plugin-data/codex-money-pilot`
 

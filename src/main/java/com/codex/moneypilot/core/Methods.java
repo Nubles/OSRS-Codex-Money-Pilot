@@ -17,6 +17,7 @@ import static net.runelite.api.Skill.CONSTRUCTION;
 import static net.runelite.api.Skill.COOKING;
 import static net.runelite.api.Skill.CRAFTING;
 import static net.runelite.api.Skill.DEFENCE;
+import static net.runelite.api.Skill.FARMING;
 import static net.runelite.api.Skill.FIREMAKING;
 import static net.runelite.api.Skill.HERBLORE;
 import static net.runelite.api.Skill.HITPOINTS;
@@ -30,6 +31,7 @@ import static net.runelite.api.Skill.SLAYER;
 import static net.runelite.api.Skill.SMITHING;
 import static net.runelite.api.Skill.STRENGTH;
 import static net.runelite.api.Skill.THIEVING;
+import static net.runelite.api.Skill.WOODCUTTING;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -50,6 +52,7 @@ public final class Methods
 	public static final String CHECKED = "Nov 2026";
 
 	private static final List<Method> ALL;
+	private static final List<Method> RECURRING;
 	private static final Map<String, Method> BY_ID = new HashMap<>();
 
 	private static final Need TROLL_STRONGHOLD = started(Quest.TROLL_STRONGHOLD, "Troll Stronghold (Dad defeated)");
@@ -321,6 +324,47 @@ public final class Methods
 
 		m.sort((a, b) -> Long.compare(b.getWikiPerHour(), a.getWikiPerHour()));
 		ALL = Collections.unmodifiableList(m);
+
+		// ---- Timegated runs, done alongside other play ----
+		// From each method's page (Money_making_guide/...), read on 4 November 2026: profit per instance after
+		// tax, activity time and minimum recurrence time. The hourly figure is the guide's "effective profit",
+		// per hour spent on the runs themselves, so these are planned alongside a method and never ranked with them.
+		List<Method> r = new ArrayList<>();
+		r.add(new Method("bird-houses", "Bird house runs", "Bird house trapping", COLLECTING, 2_239_436,
+			"4 redwood bird houses, 99 Hunter")
+			.recurring(52_254, 84, 50, null)
+			.skill(HUNTER)
+			// Redwood bird houses, which the guide's figure is for, are placed at Hunter 89.
+			.need(skill(HUNTER, 89), quest(Quest.BONE_VOYAGE))
+			.suggest(skill(MAGIC, 49)));
+		r.add(new Method("herbs-ranarr", "Herb runs (ranarr weed)", "Farming ranarr weed", COLLECTING, 1_789_600,
+			"88 herbs a run, ultracompost, magic secateurs")
+			.recurring(178_960, 360, 90, "herbs")
+			.skill(FARMING)
+			.need(skill(FARMING, 32), quest(Quest.GHOSTS_AHOY), quest(Quest.MY_ARMS_BIG_ADVENTURE),
+				quest(Quest.FAIRYTALE_I__GROWING_PAINS))
+			.suggest(skill(MAGIC, 61), skill(AGILITY, 47)));
+		r.add(new Method("herbs-snapdragon", "Herb runs (snapdragon)", "Farming snapdragon", COLLECTING, 1_751_740,
+			"ultracompost, magic secateurs")
+			.recurring(175_174, 360, 90, "herbs")
+			.skill(FARMING)
+			.need(skill(FARMING, 62), quest(Quest.GHOSTS_AHOY), quest(Quest.MY_ARMS_BIG_ADVENTURE),
+				quest(Quest.FAIRYTALE_I__GROWING_PAINS))
+			.suggest(skill(MAGIC, 61), skill(AGILITY, 47)));
+		r.add(new Method("herbs-torstol", "Herb runs (torstol)", "Farming torstol", COLLECTING, 1_467_244,
+			"ultracompost, magic secateurs")
+			.recurring(146_724, 360, 90, "herbs")
+			.skill(FARMING)
+			.need(skill(FARMING, 85), quest(Quest.GHOSTS_AHOY), quest(Quest.MY_ARMS_BIG_ADVENTURE),
+				quest(Quest.FAIRYTALE_I__GROWING_PAINS))
+			.suggest(skill(MAGIC, 61), skill(AGILITY, 47)));
+		r.add(new Method("miscellania", "Managing Miscellania", "Managing Miscellania", COLLECTING, 2_637_151,
+			"75,000 coffer, 10 workers mining and 5 on herbs")
+			.recurring(21_976, 30, 1440, null)
+			.need(quest(Quest.THRONE_OF_MISCELLANIA))
+			.suggest(quest(Quest.ROYAL_TROUBLE), skill(WOODCUTTING, 45), skill(FARMING, 10), skill(HERBLORE, 35)));
+		RECURRING = Collections.unmodifiableList(r);
+
 		for (Method method : ALL)
 		{
 			if (BY_ID.put(method.getId(), method) != null)
@@ -338,6 +382,15 @@ public final class Methods
 	public static List<Method> all()
 	{
 		return ALL;
+	}
+
+	/**
+	 * Timegated runs (bird houses, herb runs, Miscellania) that pay per run and come round on a timer.
+	 * They are not ranked with the methods above: the goal planner fits them in alongside one.
+	 */
+	public static List<Method> recurring()
+	{
+		return RECURRING;
 	}
 
 	/** The method with an id, or null. */

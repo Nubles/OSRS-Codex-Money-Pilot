@@ -1,7 +1,10 @@
 package com.codex.moneypilot.ui;
 
+import com.codex.moneypilot.core.Coach;
 import com.codex.moneypilot.core.Fit;
 import com.codex.moneypilot.core.Format;
+import com.codex.moneypilot.core.GoalPlan;
+import com.codex.moneypilot.core.Target;
 import com.codex.moneypilot.core.Method;
 import com.codex.moneypilot.core.Methods;
 import com.codex.moneypilot.core.Need;
@@ -15,6 +18,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -45,10 +49,13 @@ public class MoneyPanel extends PluginPanel
 	/** Methods shown in Best now before the rest are folded away. */
 	static final int SHOWN = 12;
 	private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH);
+	private static final DateTimeFormatter WEEKDAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH);
+	/** Colours of a plan's parts: the main method, then each run alongside. */
+	private static final Color[] PARTS = {Theme.GOLD, Theme.TEAL, Theme.GREEN, Theme.VIOLET, Theme.EMBER};
 
 	private final Actions actions;
 	private final Crest crest = new Crest();
-	private final JPanel tabs = new JPanel(new GridLayout(1, 0, 4, 0));
+	private final JPanel tabs = new JPanel(new GridLayout(0, 2, 4, 4));
 	private final JScrollPane scroll = new JScrollPane();
 	private final Set<String> open = new HashSet<>();
 	private View view = View.empty();
@@ -166,6 +173,8 @@ public class MoneyPanel extends PluginPanel
 				return reach();
 			case YOURS:
 				return yours();
+			case GOAL:
+				return goal();
 			default:
 				return best();
 		}
@@ -347,6 +356,384 @@ public class MoneyPanel extends PluginPanel
 		return s;
 	}
 
+	// ---- Goal ----
+
+	private StackPanel goal()
+	{
+		StackPanel s = new StackPanel(6, 8);
+		List<View.Goal> goals = view.goals.goals;
+		if (goals.isEmpty())
+		{
+			Card card = new Card(new BorderLayout(0, 6)).accent(Theme.GOLD);
+			card.add(Ui.label("Saving for something?", Theme.title(), Theme.GOLD), BorderLayout.NORTH);
+			card.add(Ui.wrapped(view.account.isIronman()
+					? "Type a coins goal in Money Pilot's settings and it works out how fast you can make it, with your "
+					+ "bird house, herb and Miscellania runs fitted in alongside."
+					: "Pick a savings goal in Codex Gear Roadmap, or type a coins goal in Money Pilot's settings, and it works "
+					+ "out how fast you can make it: the best mix of what you can do, with your timegated runs alongside.",
+				Theme.small(), Theme.TEXT_MUTED, TEXT), BorderLayout.CENTER);
+			s.add(card);
+			runsNote(s, null);
+			return s;
+		}
+		View.Goal first = goals.get(0);
+		s.add(goalCard(first));
+		GoalPlan plan = first.plan;
+		if (!first.target.isAffordable() && plan != null)
+		{
+			GoalPlan.Mix best = plan.getBest();
+			if (best != null)
+			{
+				s.add(new SectionHeader("Fastest for you", days(best)));
+				s.add(mixCard(best, true));
+				GoalPlan.Mix alone = plan.getAlone();
+				if (alone != null && !best.getRuns().isEmpty())
+				{
+					long saved = alone.getPlayMs() - best.getPlayMs();
+					s.add(note("Without the runs: " + Format.duration(alone.getPlayMs()) + " of " + best.getMethod().getName()
+						+ (saved >= 60_000L ? ", " + Format.duration(saved) + " longer." : ".")));
+				}
+			}
+			List<GoalPlan.Mix> others = new ArrayList<>(plan.getOthers());
+			if (!others.isEmpty() || plan.getRunsOnly() != null)
+			{
+				s.add(new SectionHeader("Or"));
+				for (GoalPlan.Mix m : others)
+				{
+					s.add(otherCard(m));
+				}
+				if (plan.getRunsOnly() != null)
+				{
+					s.add(otherCard(plan.getRunsOnly()));
+				}
+			}
+			if (best == null && plan.getRunsOnly() == null)
+			{
+				s.add(note("Nothing you can do in what is shown pays yet. Within reach lists what is nearest."));
+			}
+			if (!plan.getOpeners().isEmpty())
+			{
+				s.add(new SectionHeader("Pinned in Navigator"));
+				for (GoalPlan.Opener o : plan.getOpeners())
+				{
+					s.add(openerCard(o, best));
+				}
+			}
+			runsNote(s, plan);
+		}
+		for (View.Goal g : goals.subList(1, goals.size()))
+		{
+			s.add(new SectionHeader("Also saving for"));
+			s.add(goalCard(g));
+			if (!g.target.isAffordable() && g.plan != null && g.plan.getBest() != null)
+			{
+				s.add(otherCard(g.plan.getBest()));
+			}
+		}
+		return s;
+	}
+
+	private Card goalCard(View.Goal g)
+	{
+		Target t = g.target;
+		boolean done = t.isAffordable();
+		Card card = new Card(new BorderLayout(0, 5)).accent(done ? Theme.GREEN : Theme.GOLD).highlighted(true);
+		JPanel head = row();
+		head.add(Ui.wrapped(t.getName(), Theme.body(), Theme.GOLD_BRIGHT, TEXT - 50), BorderLayout.CENTER);
+		head.add(top(Ui.label(Format.gp(t.getPrice()), Theme.title(), Theme.TEXT)), BorderLayout.EAST);
+		JPanel body = column();
+		JPanel chips = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));
+		chips.setOpaque(false);
+		chips.setAlignmentX(LEFT_ALIGNMENT);
+		chips.add(new Chip(t.getSource() == Target.Source.GEAR_ROADMAP ? "Gear Roadmap" : "Your goal",
+			t.getSource() == Target.Source.GEAR_ROADMAP ? Theme.TEAL : Theme.GOLD));
+		if (done)
+		{
+			chips.add(new Chip("Covered", Theme.GREEN));
+		}
+		body.add(chips);
+		JPanel bar = new JPanel(new BorderLayout());
+		bar.setOpaque(false);
+		bar.setBorder(new EmptyBorder(5, 0, 3, 0));
+		bar.add(SplitBar.progress(t.getProgress(), done ? Theme.GREEN : Theme.progressColor(t.getProgress())), BorderLayout.CENTER);
+		body.add(bar);
+		JPanel figures = new JPanel(new GridLayout(1, 2, 6, 0));
+		figures.setOpaque(false);
+		figures.add(stat("YOUR COINS", Format.gp(t.getCoins()), Theme.TEXT));
+		figures.add(stat("SHORT", done ? "-" : Format.gp(t.getShort()), done ? Theme.GREEN : Theme.GOLD_BRIGHT));
+		body.add(figures);
+		String line;
+		if (done)
+		{
+			line = "Your coins cover it already.";
+		}
+		else if (g.plan == null || g.plan.getBest() == null && g.plan.getRunsOnly() == null)
+		{
+			line = "Nothing you can do in what is shown pays toward it yet.";
+		}
+		else
+		{
+			line = headline(g.plan);
+		}
+		body.add(Ui.wrapped(line, Theme.small(), done ? Theme.GREEN : Theme.TEXT, TEXT));
+		if (!t.isCoinsKnown())
+		{
+			body.add(Ui.wrapped("Open your bank so the coins in it count.", Theme.small(), Theme.GOLD, TEXT));
+		}
+		else if (t.getSource() == Target.Source.GEAR_ROADMAP)
+		{
+			body.add(Ui.wrapped("Priced at today's Grand Exchange prices, less the pieces you own.", Theme.small(),
+				Theme.TEXT_FAINT, TEXT));
+		}
+		card.add(head, BorderLayout.NORTH);
+		card.add(body, BorderLayout.CENTER);
+		return card;
+	}
+
+	/** "4.2m short: about 3h 50m of Vorkath at your own 1.1m/hr, with 4 bird house runs alongside." */
+	private String headline(GoalPlan plan)
+	{
+		String shortBy = Format.gp(plan.getNeed()) + " short: ";
+		GoalPlan.Mix best = plan.getBest();
+		if (best == null)
+		{
+			GoalPlan.Mix runs = plan.getRunsOnly();
+			return shortBy + (runs.isReached() ? "about " + days(runs.getDays()) + " of timegated runs alone."
+				: "more than ten years of timegated runs alone.");
+		}
+		if (!best.isReached())
+		{
+			return shortBy + "more than ten years at " + rateWords(best.getRate()) + ".";
+		}
+		String with = "";
+		if (!best.getRuns().isEmpty())
+		{
+			List<String> parts = new ArrayList<>();
+			for (GoalPlan.Runs r : best.getRuns())
+			{
+				parts.add(r.getCount() + " " + runName(r.getMethod(), r.getCount()));
+			}
+			with = ", with " + and(parts) + " alongside";
+		}
+		return shortBy + "about " + Format.duration(best.getPlayMs()) + " of " + best.getMethod().getName() + " at "
+			+ rateWords(best.getRate()) + with + ". " + finish(best);
+	}
+
+	/** "Done today", or "3 days at 2h a day: Fri 6 Nov." */
+	private String finish(GoalPlan.Mix mix)
+	{
+		if (mix.getDays() <= 1)
+		{
+			return "Done today, at " + hours() + " a day.";
+		}
+		LocalDate on = Instant.ofEpochMilli(view.now).atZone(zone).toLocalDate().plusDays(mix.getDays() - 1);
+		return mix.getDays() + " days at " + hours() + " a day: " + WEEKDAY.format(on).replace(' ', '\u00a0') + ".";
+	}
+
+	private String hours()
+	{
+		double h = view.goals.hoursPerDay;
+		return h == Math.rint(h) ? (long) h + "h" : Format.duration(Math.round(h * 3_600_000L));
+	}
+
+	private Card mixCard(GoalPlan.Mix mix, boolean main)
+	{
+		Card card = new Card(new BorderLayout(0, 5)).accent(Theme.GOLD);
+		JPanel head = row();
+		head.add(Ui.wrapped(mix.getMethod() != null ? mix.getMethod().getName() : "Timegated runs alone", Theme.body(), Theme.TEXT,
+			TEXT - 56), BorderLayout.CENTER);
+		head.add(top(Ui.label(mix.isReached() ? Format.duration(mix.getPlayMs()) : "10y+", Theme.title(), Theme.GOLD_BRIGHT)),
+			BorderLayout.EAST);
+		card.add(head, BorderLayout.NORTH);
+		JPanel body = column();
+		long total = Math.max(1, mix.getProfit());
+		double[] shares = new double[1 + mix.getRuns().size()];
+		Color[] colors = new Color[shares.length];
+		shares[0] = mix.getActiveProfit() / (double) total;
+		colors[0] = PARTS[0];
+		for (int i = 0; i < mix.getRuns().size(); i++)
+		{
+			shares[i + 1] = mix.getRuns().get(i).getProfit() / (double) total;
+			colors[i + 1] = PARTS[1 + i % (PARTS.length - 1)];
+		}
+		JPanel bar = new JPanel(new BorderLayout());
+		bar.setOpaque(false);
+		bar.setBorder(new EmptyBorder(1, 0, 3, 0));
+		bar.add(new SplitBar(8, shares, colors), BorderLayout.CENTER);
+		body.add(bar);
+		if (mix.getMethod() != null)
+		{
+			body.add(partLine(PARTS[0], Format.duration(mix.getActiveMs()) + " at " + rateWords(mix.getRate()),
+				mix.getActiveProfit()));
+		}
+		for (int i = 0; i < mix.getRuns().size(); i++)
+		{
+			GoalPlan.Runs r = mix.getRuns().get(i);
+			body.add(partLine(colors[i + 1], r.getCount() + " " + runName(r.getMethod(), r.getCount()) + ", "
+				+ Format.duration(r.getMs()), r.getProfit()));
+		}
+		if (main)
+		{
+			body.add(Ui.wrapped(finish(mix), Theme.small(), Theme.TEXT_MUTED, TEXT));
+		}
+		card.add(body, BorderLayout.CENTER);
+		return card;
+	}
+
+	private Card otherCard(GoalPlan.Mix mix)
+	{
+		Card card = new Card(new BorderLayout(6, 2)).accent(mix.getMethod() == null ? Theme.TEAL : Theme.GOLD_DIM);
+		String name = mix.getMethod() != null ? mix.getMethod().getName() : "Timegated runs alone";
+		card.add(Ui.wrapped(name, Theme.body(), Theme.TEXT, TEXT - 56), BorderLayout.CENTER);
+		String time = !mix.isReached() ? "10y+" : mix.getMethod() == null ? days(mix.getDays()) : Format.duration(mix.getPlayMs());
+		card.add(top(Ui.label(time, Theme.title(), Theme.GOLD)), BorderLayout.EAST);
+		String detail;
+		if (mix.getMethod() == null)
+		{
+			long perDay = mix.getDays() <= 0 ? 0 : mix.getPlayMs() / mix.getDays();
+			detail = "About " + Format.duration(perDay) + " of runs a day, nothing else";
+		}
+		else
+		{
+			detail = "At " + rateWords(mix.getRate()) + (mix.getRuns().isEmpty() ? "" : ", runs alongside") + ", "
+				+ days(mix.getDays());
+		}
+		card.add(Ui.wrapped(detail, Theme.small(), Theme.TEXT_MUTED, TEXT), BorderLayout.SOUTH);
+		return card;
+	}
+
+	private Card openerCard(GoalPlan.Opener o, GoalPlan.Mix now)
+	{
+		Card card = new Card(new BorderLayout(0, 4)).accent(Theme.VIOLET);
+		JPanel head = row();
+		head.add(Ui.wrapped(o.getGoal().getTitle(), Theme.body(), Theme.TEXT, TEXT - 56), BorderLayout.CENTER);
+		GoalPlan.Mix m = o.getMix();
+		head.add(top(Ui.label(m.isReached() ? Format.duration(m.getPlayMs()) : "10y+", Theme.title(), Theme.VIOLET)), BorderLayout.EAST);
+		card.add(head, BorderLayout.NORTH);
+		double h = o.getGoal().getHoursLeft();
+		String left = h <= 0 ? "" : " About " + (h >= 10 ? Math.round(h) + "h" : Format.duration(Math.round(h * 3_600_000L)))
+			+ " to finish it, by Navigator.";
+		String vs = now != null && now.isReached() && m.isReached() && m.getPlayMs() < now.getPlayMs()
+			? " instead of " + Format.duration(now.getPlayMs()) : "";
+		card.add(Ui.wrapped("Opens " + o.getMethod().getName() + " at " + rateWords(m.getRate()) + ": then "
+			+ Format.duration(m.getPlayMs()) + vs + "." + left, Theme.small(), Theme.TEXT_MUTED, TEXT), BorderLayout.CENTER);
+		return card;
+	}
+
+	/** Which runs the account can do, and the rule they are counted by. */
+	private void runsNote(StackPanel s, GoalPlan plan)
+	{
+		List<String> names = new ArrayList<>();
+		for (Method m : plan != null ? plan.getRuns() : GoalPlan.runsFor(view.account, Methods.recurring()))
+		{
+			names.add(m.getName());
+		}
+		String rule = "Daily runs once a day; bird houses and herbs each time they come round while you play, and once "
+			+ "at each login after the first day. Rates are the wiki's per run.";
+		s.add(note((names.isEmpty() ? "No timegated runs open yet (bird houses need Hunter 89 and Bone Voyage). "
+			: "Your timegated runs: " + String.join(", ", names) + ". ") + rule));
+	}
+
+	private static JComponent partLine(Color color, String text, long profit)
+	{
+		JPanel p = new JPanel(new BorderLayout(5, 0));
+		p.setOpaque(false);
+		p.setAlignmentX(LEFT_ALIGNMENT);
+		JPanel dot = new JPanel()
+		{
+			@Override
+			protected void paintComponent(java.awt.Graphics g)
+			{
+				java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+				Theme.smooth(g2);
+				g2.setColor(color);
+				g2.fillOval(0, 4, 6, 6);
+				g2.dispose();
+			}
+		};
+		dot.setOpaque(false);
+		dot.setPreferredSize(new Dimension(6, 12));
+		JPanel dotBox = new JPanel(new BorderLayout());
+		dotBox.setOpaque(false);
+		dotBox.add(dot, BorderLayout.NORTH);
+		p.add(dotBox, BorderLayout.WEST);
+		p.add(Ui.wrapped(text, Theme.small(), Theme.TEXT_MUTED, TEXT - 54), BorderLayout.CENTER);
+		p.add(top(Ui.label(Format.gp(profit), Theme.small(), Theme.GOLD)), BorderLayout.EAST);
+		return p;
+	}
+
+	private static String rateWords(com.codex.moneypilot.core.Rate rate)
+	{
+		if (rate == null)
+		{
+			return "the wiki's rates";
+		}
+		String who = rate.getSource() == com.codex.moneypilot.core.Rate.Source.YOURS ? "your own "
+			: rate.getSource() == com.codex.moneypilot.core.Rate.Source.SESSIONS ? "your sessions' " : "the wiki's ";
+		return who + Format.gp(rate.getPerHour()) + "/hr";
+	}
+
+	private static String runName(Method m, int count)
+	{
+		String base = m.getGroup() != null ? "herb run" : "bird-houses".equals(m.getId()) ? "bird house run"
+			: "Miscellania collection";
+		return count == 1 ? base : base + "s";
+	}
+
+	private static String days(GoalPlan.Mix mix)
+	{
+		return mix.isReached() ? days(mix.getDays()) : "10y+";
+	}
+
+	private static String days(int days)
+	{
+		return days == 1 ? "today" : days + " days";
+	}
+
+	private static String and(List<String> parts)
+	{
+		if (parts.size() <= 1)
+		{
+			return String.join("", parts);
+		}
+		return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
+	}
+
+	private static JComponent coachRow(Coach c)
+	{
+		JPanel p = column();
+		Color tone;
+		switch (c.getVerdict())
+		{
+			case BEST:
+			case AHEAD:
+				tone = Theme.GREEN;
+				break;
+			case BEHIND:
+				tone = Theme.EMBER;
+				break;
+			case SETTLING:
+				tone = Theme.TEXT_FAINT;
+				break;
+			default:
+				tone = Theme.TEXT;
+				break;
+		}
+		p.add(Ui.wrapped(c.line(), Theme.small(), tone, TEXT));
+		List<String> refs = new ArrayList<>();
+		if (c.getBest() != null)
+		{
+			refs.add("Best " + Format.gp(c.getBest()));
+		}
+		if (c.getUsual() != null)
+		{
+			refs.add("usual " + Format.gp(c.getUsual()));
+		}
+		refs.add("wiki " + Format.gp(c.getWiki()));
+		p.add(Ui.wrapped(String.join(", ", refs) + " an hour", Theme.small(), Theme.TEXT_FAINT, TEXT));
+		return p;
+	}
+
 	// ---- Cards ----
 
 	private Card methodCard(Planner.Pick pick, int rank)
@@ -512,6 +899,10 @@ public class MoneyPanel extends PluginPanel
 		figures.add(stat("SO FAR", Format.signed(live.profit), live.profit < 0 ? Theme.BLOOD : Theme.TEXT));
 		figures.add(stat("AN HOUR", live.perHour() == 0 ? "-" : Format.signed(live.perHour()), Theme.TEXT));
 		body.add(figures);
+		if (live.coach != null)
+		{
+			body.add(coachRow(live.coach));
+		}
 		body.add(Ui.wrapped(live.loggedIn ? "Bank your loot before you stop, so it counts."
 			: "Paused while you are logged out.", Theme.small(), Theme.TEXT_MUTED, TEXT));
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
