@@ -955,7 +955,7 @@ public class CodexMoneyPilotPlugin extends Plugin
 		boolean skulled = skull >= 0 && skull != SkullIcon.SKULL_FIGHT_PIT && skull != SkullIcon.FORINTHRY_SURGE;
 		Map<Integer, Long> carried = new HashMap<>(inventory);
 		worn.forEach((k, v) -> carried.merge(k, v, Long::sum));
-		return DeathRisk.of(carried, lootingBag, DeathRisk.kept(skulled, client.isPrayerActive(Prayer.PROTECT_ITEM), false),
+		return DeathRisk.of(carried, lootingBag, DeathRisk.kept(skulled, client.getVarbitValue(Prayer.PROTECT_ITEM.getVarbit()) == 1, false),
 			this::price);
 	}
 
