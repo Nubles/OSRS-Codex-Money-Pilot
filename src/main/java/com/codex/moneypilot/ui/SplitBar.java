@@ -44,7 +44,8 @@ public class SplitBar extends JComponent
 		Shape groove = new RoundRectangle2D.Float(0, 0, w - 1, h - 1, h, h);
 		g.setColor(Theme.INK_DEEP);
 		g.fill(groove);
-		g.setClip(groove);
+		Shape old = g.getClip();
+		g.clip(groove);
 		double x = 0;
 		for (int i = 0; i < shares.length; i++)
 		{
@@ -66,7 +67,7 @@ public class SplitBar extends JComponent
 			}
 			x += part;
 		}
-		g.setClip(null);
+		g.setClip(old);
 		g.setColor(Theme.STROKE);
 		g.draw(groove);
 		g.dispose();
